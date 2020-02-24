@@ -18,6 +18,10 @@ class Runner(ABC):
     A runner works as an interface between the learning agent and the learning environment. Anything the agent wants to
     do in the environment should be run through a runner. Each environment should gets its own style of runner because
     every environment operates differently.
+
+    Any method not included in this list should be preceded with __ to denote that is is unique to this specific
+    runner. e.g.
+        def __other_method(self): return
     """
 
     @abstractmethod
