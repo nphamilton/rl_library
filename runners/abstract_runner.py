@@ -22,6 +22,10 @@ class Runner(ABC):
     Any method not included in this list should be preceded with __ to denote that is is unique to this specific
     runner. e.g.
         def __other_method(self): return
+
+    Additionally, every runner should have the following class variables:
+        obs_shape     (np.ndarray or np.array)
+        action_shape  (np.array)
     """
 
     @abstractmethod
