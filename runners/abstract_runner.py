@@ -68,6 +68,18 @@ class Runner(ABC):
         pass
 
     @abstractmethod
+    def stop(self):
+        """
+        This method should stop the agent from continuing any further actions. This could be a halt, or a termination of
+        sorts. This should prevent the agent from hurting itself.
+
+        :input:
+            None
+        :output:
+            None
+        """
+
+    @abstractmethod
     def reset(self):
         """
         This function should reset the environment. In the case of a simulation, this should take the agent back to a

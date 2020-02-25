@@ -27,14 +27,15 @@ class ARSPolicy(object):
         self.buffer_mu = np.zeros((num_observations,), dtype=float)
         self.buffer_s = np.zeros((num_observations,), dtype=float)
 
-    def get_action(self, state):
+    def get_action(self, state, weights=None):
         """
         This method determines the desired action to take at a given state. Additionally, if the agent is exploring and
         not evaluating, this method records the state information in the form of a running average and standard
         deviation.
 
-        :param state:   (np.array) The input state
-        :return action: (np.array) The desired action
+        :param state:   (np.array)   The input state
+        :param weights: (np.ndarray) Optional input for following a different set of weights
+        :return action: (np.array)   The desired action
         """
         # Record state info if not evaluating
         if not self.is_evaluating:
@@ -44,7 +45,12 @@ class ARSPolicy(object):
         state = self.__normalize(state)
 
         # Determine the action
-        action = self.theta.dot(state)
+        if weights is None:
+            action = self.theta.dot(state)
+        else:
+            assert weights.shape == self.theta.shape, \
+                ("weights.shape = {}, theta.shape = {}".format(weights.shape, self.theta.shape))
+            action = weights.dot(state)
 
         return action
 
@@ -100,6 +106,11 @@ class ARSPolicy(object):
         self.mu = new_mu
         self.var = new_var
         self.std = np.sqrt(new_var)
+
+        # Clear the buffers
+        self.buffer_n = 0.0
+        self.buffer_mu = np.zeros_like(new_mu)
+        self.buffer_s = np.zeros(new_s)
 
         """
         NOTE: This bit is added according to the original implementation found at

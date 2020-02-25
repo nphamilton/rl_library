@@ -29,24 +29,9 @@ class Algorithm(ABC):
         :input:
             evaluation_length
         :output:
-            return reward_sum, steps, done, exit
+            return reward_sum, steps, done, exit_cond
         """
         pass
-
-    # Will likely move this to a method for the policy
-    # @abstractmethod
-    # def get_action(self):
-    #     """
-    #     This method queries the agent's policy and selects the action to perform. Many algorithms handle this
-    #     differently, so it is important to specify this method.
-    #
-    #     :input:
-    #         evaluation_length
-    #     :output:
-    #         return reward_sum, steps, done, exit
-    #     """
-    #     pass
-    #
 
     @abstractmethod
     def load_model(self, load_path):
