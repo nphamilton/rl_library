@@ -38,7 +38,20 @@ class Runner(ABC):
         pass
 
     @abstractmethod
-    def step(self):
+    def is_available(self):
+        """
+        This method checks to make sure the environment is still available. Some environments are able to discontinue
+        without stopping the learning process.
+
+        :input:
+            None
+        :output:
+            return 0/1 (0 if unavailable, 1 if available)
+        """
+        pass
+
+    @abstractmethod
+    def step(self, action):
         """
         This function should execute a single step within the environment and return all necessary information
         including in the following order:
@@ -61,6 +74,8 @@ class Runner(ABC):
         safe starting point. In a real-world system, this might involve halting until a resume signal has been sent
         allowing the user to move the agent to a safe starting location.
 
+        :input:
+            None
         :output:
             Nothing is returned from this function.
         """
