@@ -14,17 +14,43 @@ import math
 import os
 import numpy as np
 import torch
-import torch.nn.functional as F
 from algorithms.abstract_algorithm import Algorithm
 from algorithms.ars.core import *
 
 
 class ARS(Algorithm):
-    def __init__(self, num_observations, num_actions, runner, step_size, dirs_per_iter, exploration_noise,
-                 num_top_performers, rollout_length, evaluation_length, evaluation_iter, num_evaluations,
-                 num_training_steps):
+    def __init__(self, runner, num_training_steps, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
+                 exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
+                 num_evaluations=5, random_seed=8):
         """
-        TODO: talk about it
+        This class implements the Augmented Random Search algorithm written about in https://arxiv.org/abs/1803.07055
+        The default values provided in this class are a blend between the ones used in the authors implementation
+        (https://github.com/modestyachts/ARS/tree/4c8e24e0a99cf811030e90680fc29eb94fae8cdd) and another implementation
+        like this one that isn't parallelized (https://github.com/colinskow/move37/blob/master/ars/ars.py)
+
+        The input names are descriptive of variable's meaning, but within the class, the variable names from the paper
+        are used.
+
+        :param runner:              (Runner) The interface between the learning agent and the environment.
+        :param num_training_steps:  (int)    The total number of steps taken during training. The agent will execute at
+                                                least this many steps.
+        :param step_size:           (float)  A scaling factor for how the policy is adjusted. Value is between 0 and 1.
+        :param dirs_per_iter:       (int)    The number of directions to explore at each iteration or exploration.
+                                                Value is greater than 1.
+        :param num_top_performers:  (int)    The number of top performers to use for computing the update. Value must
+                                                be <= dirs_per_iter and > 0.
+        :param exploration_noise:   (float)  The standard deviation of the exploration noise applied to each direction.
+                                                Value is between 0 and 1.
+        :param rollout_length:      (int)    The maximum number of steps the agent should take during a rollout.
+                                                i.e. how far the agent explores in any given direction.
+        :param evaluation_length:   (int)    The maximum number of steps the agent should take when evaluating the
+                                                policy.
+        :param evaluation_iter:     (int)    The number of exploration iterations completed between policy evaluations.
+                                                This is also the point at which the policy is saved.
+        :param num_evaluations:     (int)    The number of evaluations that over at an evaluation point. It is best to
+                                                complete at lease 3 evaluation traces to account for the variance in
+                                                transition probabilities.
+        :param random_seed:         (int)    The random seed value to use for the whole training process.
         """
 
         # Make sure the input parameters are valid
@@ -42,13 +68,20 @@ class ARS(Algorithm):
         self.num_evals = num_evaluations
         self.num_training_steps = num_training_steps
 
-        # Create the policy
-        self.policy = ARSPolicy(num_observations=num_observations, num_actions=num_actions)
+        # Set the random seed
+        np.random.seed(random_seed)
 
-    def __do_rollout(self, wieghts):
+        # Create the policy
+        self.policy = ARSPolicy(num_observations=runner.obs_shape[1], num_actions=runner.action_shape[1])
+
+        # Set up the logger and saving paths
+        # TODO
+
+    def __do_rollout(self, weights):
         """
-        TODO
-        :param wieghts: (np.ndarray)
+        This method performs a single rollout using the specified weights.
+
+        :param weights: (np.ndarray) The policy to follow instead of the trained policy for this rollout
         :return:
         """
         # Initialize
@@ -69,7 +102,7 @@ class ARS(Algorithm):
                 break
 
             # Determine the next action
-            action = self.policy.get_action(state, weights=wieghts)
+            action = self.policy.get_action(state, weights=weights)
 
             # Execute determined action
             next_state, reward, done = self.runner.step(action)
@@ -87,12 +120,14 @@ class ARS(Algorithm):
         steps. Multiple evaluations should be used to account for variations in performance.
 
         :input:
-            :param evaluation_length:   (int)
+            :param evaluation_length:   (int)   The maximum number of steps to execute during the evaluation run. If -1
+                                                    is used, the method will ignore an upper bound for number of steps
+                                                    to execute.
         :outputs:
-            :return reward_sum:         (float)
-            :return step:               (int)
-            :return done:               (int)
-            :return exit_cond:          (int)
+            :return reward_sum:         (float) The cummulative reward collected during the run.
+            :return step:               (int)   The number of steps executed during the run.
+            :return done:               (int)   A signal indicating if the agent reached a final state.
+            :return exit_cond:          (int)   A signal indicating if the agent reached a fatal state.
         """
 
         # Initialize
@@ -175,8 +210,13 @@ class ARS(Algorithm):
         """
         This method trains the agent to learn an optimal model according to the ARS algorithm.
 
-        :output:
-            return final_policy_reward_sum, execution_time, training_time
+        :outputs:
+            :return final_policy_reward_sum: (float) The accumulated reward collected by the agent evaluated using the
+                                                        latest update of the learned policy.
+            :return execution_time:          (float) The amount of time (in seconds) it took to run the full
+                                                        train_model() method.
+            :return training_time:           (float) The amount of time (in seconds) it took to complete the training
+                                                        process.
         """
 
         # Initialize shit
@@ -187,8 +227,7 @@ class ARS(Algorithm):
 
         while step < self.num_training_steps:
             # Sample N noise profiles
-            # TODO: figure out how to sample
-            noise = np.zeros(self.N)
+            noise = np.random.randn(self.N)
 
             # Collect 2N rollouts and their corresponding rewards
             rewards_pos = np.zeros(self.N)
@@ -214,7 +253,7 @@ class ARS(Algorithm):
             if (eval_count + 1) % self.eval_iter == 0:
                 t_eval_start = time.time()
                 for j in range(self.num_evals):
-                    pass  # TODO
+                    pass  # TODO set up evaluation and logging as well as saving
                 t_eval_end = time.time()
                 evaluation_time += t_eval_end - t_eval_start
 
@@ -264,5 +303,3 @@ class ARS(Algorithm):
         self.policy.theta = new_policy
 
         return
-
-
