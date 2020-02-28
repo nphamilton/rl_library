@@ -65,9 +65,9 @@ class Runner(ABC):
             4 exit condition (if the agent has reached a fatal state, this will be 1, otherwise 0)
 
         :input:
-            action
+            action  (np.array)
         :output:
-            return next_state, reward, done, exit
+            return next_state, reward, done, exit_cond
         """
         pass
 
@@ -82,6 +82,7 @@ class Runner(ABC):
         :output:
             None
         """
+        pass
 
     @abstractmethod
     def reset(self):
