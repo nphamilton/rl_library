@@ -9,6 +9,7 @@ Usage:       Import the entire class file to instantiate and use this runner.
 
 """
 import numpy as np
+import pandas as pd
 import rospy
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PoseStamped
@@ -68,14 +69,27 @@ class F110Runner(Runner):
         self.reset_env = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 
         # Load the reference trajectory used for calculating the reward.
+        self.__load_reference_track(reference_file_name)
+        self.prev_pos_index = 0
 
-    def __calculate_reward(self, state):
+    def __calculate_reward(self):
         """
         TODO: Figure this out!!!
-        :param state:
         :return:
         """
-        reward = 0
+
+        # Determine the current position index
+        curr_pos_index = self.__find_closest_point(self.prev_pos_index)
+
+        # Calculate the distance traveled between points
+        reward = self.ref_track[curr_pos_index, 2] - self.ref_track[self.prev_pos_index, 2]
+
+        # The reward will be a very large negative value if a lap was completed, so recompute in those cases
+        if reward < -5.0:
+            end = len(self.ref_track) - 1
+            dist_to_end = self.ref_track[end, 2] - self.ref_track[self.prev_pos_index, 2]
+            dist_from_start = self.ref_track[curr_pos_index, 2]
+            reward = dist_to_end + dist_from_start
 
         return reward
 
@@ -99,7 +113,7 @@ class F110Runner(Runner):
         dy = data.twist.twist.linear.y
         speed = np.sqrt(dx ** 2 + dy ** 2)
 
-        self.pos = [x, y, yaw, speed]
+        self.pos = np.asarray([x, y, yaw, speed])
         # print('ego_pos updated')
 
     def __callback_lidar(self, data):
@@ -132,6 +146,55 @@ class F110Runner(Runner):
         self.lidar_ranges = clipped_ranges
 
         return
+
+    def __find_closest_point(self, prev_pos):
+        """
+
+        :param prev_pos:
+        :return:
+        """
+
+        # Record the current position
+        curr_pos = self.pos
+        ref = self.ref_track
+        l = len(ref)
+
+        # Find the closest point using a binary search-esque method
+        index_min = (prev_pos - 10) % l
+        index_max = (prev_pos + 20) % l
+        select_index = index_min
+        min_dist = 100.0
+        iters = 0
+        while iters < 10:
+            if index_max > index_min:
+                for i in range(index_min, index_max):
+                    dist = np.sqrt((ref[i, 0] - curr_pos[0])**2 + (ref[i, 1] - curr_pos[1])**2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        select_index = i
+            else:
+                for i in range(index_min, l):
+                    dist = np.sqrt((ref[i, 0] - curr_pos[0]) ** 2 + (ref[i, 1] - curr_pos[1]) ** 2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        select_index = i
+                for i in range(index_max):
+                    dist = np.sqrt((ref[i, 0] - curr_pos[0]) ** 2 + (ref[i, 1] - curr_pos[1]) ** 2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        select_index = i
+            # TODO: explain why
+            if abs(select_index - index_min) < 3:
+                index_max = (index_min + 5) % l
+                index_min = (index_min - 30) % l
+            elif abs(select_index - index_max) < 3:
+                index_min = (index_max - 5) % l
+                index_max = (index_max + 30) % l
+            else:
+                break
+            iters += 1
+
+        return select_index
 
     def get_state(self):
         """
@@ -184,9 +247,34 @@ class F110Runner(Runner):
 
         return done, exit_cond
 
-    def __publish_cmd(self, velocity, steering_angle):
+    def __load_reference_track(self, file_name):
+        """
+        TODO: documentation
+        :param file_name:
+        :return:
         """
 
+        # Read the waypoint file
+        df = pd.read_csv(file_name, names=['X', 'Y', 'Z', 'W'])
+        waypoints = df[['X', 'Y']].to_numpy()
+
+        # Compute the distances along the track
+        ref_track = np.zeros((len(waypoints), 3), dtype=float)
+        ref_track[0, :] = [waypoints[0, 0], waypoints[0, 1], 0.0]
+        tot_dist = 0.0
+        for i in range(1, len(waypoints)):
+            dist = np.sqrt(
+                (waypoints[i, 0] - waypoints[(i - 1), 0]) ** 2 + (waypoints[i, 1] - waypoints[(i - 1), 1]) ** 2)
+            tot_dist += dist
+            ref_track[i, :] = [waypoints[i, 0], waypoints[i, 1], tot_dist]
+
+        self.ref_track = ref_track
+
+        return
+
+    def __publish_cmd(self, velocity, steering_angle):
+        """
+        TODO: documentation
         :param velocity:
         :param steering_angle:
         :return:
@@ -231,7 +319,7 @@ class F110Runner(Runner):
 
         # Collect new state
         next_state = self.get_state()
-        reward = self.__calculate_reward(next_state)
+        reward = self.__calculate_reward()
         done, exit_cond = self.__is_terminal()
 
         return next_state, reward, done, exit_cond
@@ -253,3 +341,27 @@ class F110Runner(Runner):
 
         return
 
+
+if __name__ == '__main__':
+    file_name = '~/Platooning-F1Tenth/src/a_stars_pure_pursuit/waypoints/waypoints.csv'
+    # df = pd.read_csv(file_name, names=['X', 'Y', 'Z?', 'W'])
+    # waypoints = df[['X', 'Y']].to_numpy()
+    # print(waypoints)
+    # fig, ax = plt.subplots()
+    # ax.plot(waypoints[:, 0], waypoints[:, 1])
+    # # plt.show()
+    # ref_track = np.zeros((len(waypoints), 3), dtype=float)
+    # ref_track[0, :] = [waypoints[0, 0], waypoints[0, 1], 0.0]
+    # tot_dist = 0.0
+    # for i in range(1, len(waypoints)):
+    #     dist = np.sqrt((waypoints[i, 0] - waypoints[(i - 1), 0])**2 + (waypoints[i, 1] - waypoints[(i - 1), 1])**2)
+    #     tot_dist += dist
+    #     ref_track[i, :] = [waypoints[i, 0], waypoints[i, 1], tot_dist]
+    #
+    # print(ref_track)
+    # run = F110Runner(file_name, 'p', 'p', 'p')
+    # run.pos = run.ref_track[5, :] + 0.1*np.random.rand(3)
+    # print(run.pos)
+    # r = run.find_closest_point(1977)
+    # print(r)
+    # print(run.ref_track[r, :])
