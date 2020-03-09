@@ -54,6 +54,19 @@ class ARSPolicy(object):
 
         return action
 
+    def get_noise(self, num_profiles):
+        """
+        This method returns the specified number of noise profiles. Each the same size as theta.
+
+        :param num_profiles:    (int)        The number of desired noise profiles to be returned
+        :return noise_profiles: (np.ndarray) Matrix of random Gaussian distributed values arranged as noise profiles
+                                                that are each the same size as the policy weights.
+        """
+
+        noise_profiles = np.random.rand(num_profiles, self.theta.shape[0], self.theta.shape[1])
+
+        return noise_profiles
+
     def __normalize(self, state):
         """
         This method normalizes the input state according to the current mean and standard deviation.

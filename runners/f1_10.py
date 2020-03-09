@@ -91,6 +91,8 @@ class F110Runner(Runner):
             dist_from_start = self.ref_track[curr_pos_index, 2]
             reward = dist_to_end + dist_from_start
 
+        self.prev_pos_index = curr_pos_index
+
         return reward
 
     def __callback_odom(self, data):

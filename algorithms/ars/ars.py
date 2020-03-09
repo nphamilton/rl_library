@@ -21,7 +21,7 @@ from algorithms.ars.core import *
 class ARS(Algorithm):
     def __init__(self, runner, num_training_steps, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                  exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
-                 num_evaluations=5, random_seed=8):
+                 num_evaluations=5, random_seed=8, log_path='.', save_path='.'):
         """
         This class implements the Augmented Random Search algorithm written about in https://arxiv.org/abs/1803.07055
         The default values provided in this class are a blend between the ones used in the authors implementation
@@ -67,6 +67,7 @@ class ARS(Algorithm):
         self.eval_iter = evaluation_iter
         self.num_evals = num_evaluations
         self.num_training_steps = num_training_steps
+        self.save_path = save_path
 
         # Set the random seed
         np.random.seed(random_seed)
@@ -74,15 +75,21 @@ class ARS(Algorithm):
         # Create the policy
         self.policy = ARSPolicy(num_observations=runner.obs_shape[1], num_actions=runner.action_shape[1])
 
-        # Set up the logger and saving paths
-        # TODO
+        # Create the log files
+        if not os.path.isdir(log_path):
+            os.mkdir(log_path)
+        self.log_save_name = log_path + '/episode_performance.csv'
+        f = open(self.log_save_name, "w+")
+        f.write("training steps, time, steps in evaluation, accumulated reward, done, exit condition \n")
+        f.close()
 
     def __do_rollout(self, weights):
         """
         This method performs a single rollout using the specified weights.
 
-        :param weights: (np.ndarray) The policy to follow instead of the trained policy for this rollout
-        :return:
+        :param weights:     (np.ndarray) The policy to follow instead of the trained policy for this rollout
+        :return reward_sum: (float)      The total reward accumulated during the rollout
+        :return step:       (int)        The number of steps executed during the rollout
         """
         # Initialize
         step = 0
@@ -151,7 +158,7 @@ class ARS(Algorithm):
             action = self.policy.get_action(state)
 
             # Execute determined action
-            next_state, reward, done = self.runner.step(action)
+            next_state, reward, done, exit_cond = self.runner.step(action)
 
             # Update for next step
             reward_sum += reward
@@ -188,9 +195,7 @@ class ARS(Algorithm):
         This method saves the current model learned by the agent.
 
         :input:
-            save_path
-        :output:
-            None
+            :param save_path: (string) The file name the model will be saved to. Default='model.pth'
         """
 
         # Save everything necessary to start up from this point
@@ -219,7 +224,7 @@ class ARS(Algorithm):
                                                         process.
         """
 
-        # Initialize shit
+        # Initialize iterative values
         t_start = time.time()
         step = 0
         eval_count = 0
@@ -227,7 +232,7 @@ class ARS(Algorithm):
 
         while step < self.num_training_steps:
             # Sample N noise profiles
-            noise = np.random.randn(self.N)
+            noise = self.policy.get_noise(self.N)
 
             # Collect 2N rollouts and their corresponding rewards
             rewards_pos = np.zeros(self.N)
@@ -250,10 +255,33 @@ class ARS(Algorithm):
             self.update_model(rewards_pos, rewards_neg, noise)
 
             # Evaluate the model
-            if (eval_count + 1) % self.eval_iter == 0:
+            eval_count += 1
+            if eval_count % self.eval_iter == 0:
                 t_eval_start = time.time()
+                log_time = t_eval_start - t_start - evaluation_time
+                avg_steps = 0.0
+                avg_reward = 0.0
                 for j in range(self.num_evals):
-                    pass  # TODO set up evaluation and logging as well as saving
+                    eval_steps, reward, done, exit_cond = self.evaluate_model(self.eval_len)
+
+                    # Log the evaluation run
+                    with open(self.log_save_name, "a") as myfile:
+                        myfile.write(str(step) + ', ' + str(log_time) + ', ' + str(eval_steps) + ', ' + str(reward) +
+                                     ', ' + str(done) + ', ' + str(exit_cond) + '\n')
+
+                    avg_steps += eval_steps
+                    avg_reward += reward
+
+                # Print the average results for the user to debugging
+                print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps/self.num_evals) +
+                      ', Avg Acc Reward: ' + str(avg_reward/self.num_evals))
+
+                # Save the model that achieved this performance
+                print('saving...')
+                save_path = self.save_path + '/step_' + str(step) + '_model.pth'
+                self.save_model(save_path=save_path)
+
+                # Do not count the time taken to evaluate and save the model as training time
                 t_eval_end = time.time()
                 evaluation_time += t_eval_end - t_eval_start
 
@@ -263,7 +291,11 @@ class ARS(Algorithm):
         t_train = time.time()
         training_time = t_train - t_start - evaluation_time
 
+        # Evaluate and save the final learned model
         final_policy_reward_sum, _, _, _ = self.evaluate_model(self.eval_len)
+        print('saving...')
+        save_path = self.save_path + '/final_model.pth'
+        self.save_model(save_path=save_path)
 
         t_final = time.time()
         execution_time = t_final - t_start
@@ -274,9 +306,10 @@ class ARS(Algorithm):
         """
         This method executes the model update according to the ARS algorithm
 
-        :param rewards_pos: (np.array)
-        :param rewards_neg: (np.array)
-        :param noise:       (np.array)
+        :param rewards_pos: (np.array) An array of the rewards collected after adding the noise to the policy weights
+        :param rewards_neg: (np.array) An array of the rewards collected after subtracting the noise from the policy
+                                        weights
+        :param noise:       (np.array) An array of the noise
         :return:
         """
 
@@ -284,7 +317,7 @@ class ARS(Algorithm):
         max_r = np.maximum(rewards_pos, rewards_neg)
         indexes = np.argsort(max_r)  # Indexes are arranged for smallest to largest
 
-        sum_augs = 0.0
+        sum_augs = np.zeros_like(self.policy.theta)
         l = len(indexes)
         r_2b = []
         for i in range(self.b):
