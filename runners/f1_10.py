@@ -74,7 +74,7 @@ class F110Runner(Runner):
 
     def __calculate_reward(self):
         """
-        TODO: Figure this out!!!
+        TODO: write up explanation
         :return:
         """
 
@@ -151,7 +151,7 @@ class F110Runner(Runner):
 
     def __find_closest_point(self, prev_pos):
         """
-
+        TODO: write explanation
         :param prev_pos:
         :return:
         """
@@ -202,10 +202,7 @@ class F110Runner(Runner):
         """
         This function returns the current state of the agent in the environment.
 
-        :input:
-            None
-        :output:
-            curr_state
+        :return curr_state: (np.array) The current state of the agent is the selected lidar values.
         """
         curr_state = self.lidar_ranges[self.indices]
 
@@ -340,6 +337,7 @@ class F110Runner(Runner):
         """
 
         self.reset_env()
+        self.rate.sleep()
 
         return
 

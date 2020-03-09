@@ -14,9 +14,10 @@ import math
 import os
 import numpy as np
 import torch
+from torch.autograd import Variable
 from algorithms.abstract_algorithm import Algorithm
 from utils.replay_buffer import *
-# from algorithms.ddpg.core import *
+from algorithms.ddpg.core import *
 
 
 class DDPG(Algorithm):
@@ -70,6 +71,53 @@ class DDPG(Algorithm):
 
         return reward_sum, step, done, exit_cond
 
+    def __explore(self, num_steps):
+        """
+        Execute random actions
+        :param num_steps:
+        :return:
+        """
+
+        # Initialize variables
+        steps_taken = 0
+        done = 0
+        exit_cond = 0
+
+        # Get the initial state information and reset the Ornstein-Uhlenbeck noise
+        self.noise.reset()
+        state, _ = self.runner.get_state()
+
+        # during exploration, update after every step
+        while steps_taken < num_steps:
+
+            # Determine the action to take
+            action = self.get_action(state, self.noise.noise())
+
+            # Take the action
+            next_state, reward, done, exit_cond = self.runner.step(action)
+
+            # Record the information in the replay buffer
+            self.replay_buffer.add_memory(state, action, reward, done, next_state)
+
+            # Only update if the replay buffer is full
+            if len(self.replay_buffer.rewards) >= self.batch_size:
+                # Update the neural networks using a random sampling of the replay buffer
+                mb_states, mb_actions, mb_rewards, mb_dones, mb_next_states = self.replay_buffer.sample_batch(
+                    self.batch_size)
+                actor_loss, critic_loss = self.update_model(mb_states, mb_actions, mb_rewards, mb_dones, mb_next_states)
+
+            # Only reset the environment if a terminal state has been reached
+            if done == 1 or exit_cond == 1:
+                self.runner.reset()
+                self.noise.reset()
+                state = self.runner.get_state()
+            else:
+                state = next_state
+
+            steps_taken += 1
+
+        return
+
     def load_model(self, load_path):
         """
         This method loads a model. The loaded model can be a previously learned policy or an initializing policy used
@@ -117,7 +165,7 @@ class DDPG(Algorithm):
 
             # Train through exploration
             ep_length = min(self.episode_length, (self.num_training_steps - step))
-            self.play_through_training(ep_length)
+            self.__explore(ep_length)
             step += ep_length
 
             # Evaluate the model
@@ -165,10 +213,63 @@ class DDPG(Algorithm):
 
         return final_policy_reward_sum, execution_time, training_time
 
-    def update_model(self):
+    def update_model(self, states, actions, rewards, dones, next_states):
         """
-        This method executes the model update according to the specific learning algorithm.
+        This function updates neural networks for the actor and critic using back-propogation. More information about
+        this process can be found in the DDPG paper.
 
-        Inputs and outputs for this method depend on the learning algorithm.
+        :inputs:
+            :param states:       (list)  The batch of states from the replay buffer
+            :param actions:      (list)  The batch of actions from the replay buffer
+            :param rewards:      (list)  The batch of rewards from the replay buffer
+            :param dones:        (list)  The batch of done values (1 indicates crash, 0 indicates no crash) from the
+                                           replay buffer
+            :param next_states:  (list)  The batch of states reached after executing the actions from the replay buffer
+        :outputs:
+            :return actor_loss:  (float) The loss value calculated for the actor
+            :return critic_loss: (float) The loss value calculated for the critic
         """
-        pass
+        # Convert the inputs into tensors to speed up computations
+        batch_states = Variable(torch.FloatTensor(states).to(self.device), requires_grad=True)
+        batch_actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
+        batch_rewards = Variable(torch.FloatTensor(rewards).to(self.device), requires_grad=True).unsqueeze(1)
+        batch_dones = Variable(torch.FloatTensor(dones).to(self.device), requires_grad=True).unsqueeze(1)
+        batch_next_states = Variable(torch.FloatTensor(next_states).to(self.device), requires_grad=True)
+
+        # Compute the critics estimated Q values
+        batch_qs = self.critic_nn.forward(batch_states, batch_actions)
+
+        # Compute what the actions would have been without noise
+        actions_without_noise = self.actor_nn.forward(batch_states)
+
+        # Compute the target's next state and next Q-value estimates used for computing loss
+        target_next_action_batch = (self.actor_target_nn.forward(batch_next_states)).detach()
+        target_next_q_batch = (self.critic_target_nn.forward(batch_next_states, target_next_action_batch)).detach()
+
+        # Compute y (a metric for computing the critic loss)
+        y = (batch_rewards + ((1 - batch_dones) * self.gamma * target_next_q_batch)).detach()
+
+        # Compute critic loss and update using the optimizer
+        critic_loss = F.mse_loss(y, batch_qs)
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+
+        # Compute the actor loss and update using the optimizer
+        actor_loss = -self.critic_nn(batch_states, actions_without_noise)
+        actor_loss = actor_loss.mean()
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        # Update the target networks
+        soft_update(self.actor_target_nn, self.actor_nn, tau=self.tau)
+        soft_update(self.critic_target_nn, self.critic_nn, tau=self.tau)
+
+        # new_params = list(self.actor_nn.parameters())[0].clone()
+        # print(torch.equal(new_params.data, self.old_params.data))
+        #
+        # self.old_params = new_params
+
+        # Output the loss values for logging purposes
+        return actor_loss.cpu(), critic_loss.cpu()

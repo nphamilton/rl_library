@@ -25,6 +25,6 @@ if __name__ == '__main__':
     # Create the learner
     learner = ARS(runner=runner, num_training_steps=100000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                   exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
-                  num_evaluations=5, random_seed=8)
+                  num_evaluations=5, random_seed=8, log_path='.', save_path='.')
 
     learner.train_model()
