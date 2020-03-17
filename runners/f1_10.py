@@ -56,6 +56,9 @@ class F110Runner(Runner):
         self.scale_mult = (max_action - min_action) / 2.0
         self.scale_add = (max_action - min_action) / 2.0 + min_action
 
+        self.obs_shape = None
+        self.action_shape = min_action.shape
+
         self.indices = None
 
         # Initialize subscribers
@@ -216,7 +219,7 @@ class F110Runner(Runner):
         :input:
             None
         :output:
-            return 0/1 (0 if unavailable, 1 if available)
+            return T/F
         """
 
         return not rospy.is_shutdown()
