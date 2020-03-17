@@ -21,7 +21,7 @@ from algorithms.ars.core import *
 class ARS(Algorithm):
     def __init__(self, runner, num_training_steps, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                  exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
-                 num_evaluations=5, random_seed=8, log_path='.', save_path='.'):
+                 num_evaluations=5, random_seed=8, log_path='.', save_path='.', load_path=None):
         """
         This class implements the Augmented Random Search algorithm written about in https://arxiv.org/abs/1803.07055
         The default values provided in this class are a blend between the ones used in the authors implementation
@@ -51,6 +51,11 @@ class ARS(Algorithm):
                                                 complete at lease 3 evaluation traces to account for the variance in
                                                 transition probabilities.
         :param random_seed:         (int)    The random seed value to use for the whole training process.
+        :param log_path:            (str)   File path to directory where the 'training_performance.csv' will be saved.
+                                                Default='.'
+        :param save_path:           (str)   File path to directory where all saved models will be stored. Default='.'
+        :param load_path:           (str)   File path to a previously saved model to load from. Default=None indicating
+                                                no model to  load from.
         """
 
         # Make sure the input parameters are valid
@@ -73,12 +78,14 @@ class ARS(Algorithm):
         np.random.seed(random_seed)
 
         # Create the policy
-        self.policy = ARSPolicy(num_observations=runner.obs_shape[1], num_actions=runner.action_shape[1])
+        self.policy = ARSPolicy(num_observations=runner.obs_shape[0], num_actions=runner.action_shape[0])
+        if load_path is not None:
+            self.load_model(load_path)
 
         # Create the log files
         if not os.path.isdir(log_path):
             os.mkdir(log_path)
-        self.log_save_name = log_path + '/episode_performance.csv'
+        self.log_save_name = log_path + '/training_performance.csv'
         f = open(self.log_save_name, "w+")
         f.write("training steps, time, steps in evaluation, accumulated reward, done, exit condition \n")
         f.close()
@@ -94,6 +101,7 @@ class ARS(Algorithm):
         # Initialize
         step = 0
         reward_sum = 0
+        self.policy.is_evaluating = False
 
         # Start the evaluation from a safe starting point
         self.runner.reset()
@@ -112,7 +120,7 @@ class ARS(Algorithm):
             action = self.policy.get_action(state, weights=weights)
 
             # Execute determined action
-            next_state, reward, done = self.runner.step(action)
+            next_state, reward, done, exit_cond = self.runner.step(action)
 
             # Update for next step
             reward_sum += reward
@@ -140,6 +148,7 @@ class ARS(Algorithm):
         # Initialize
         step = 0
         reward_sum = 0
+        self.policy.is_evaluating = True
 
         # Start the evaluation from a safe starting point
         self.runner.reset()
@@ -204,7 +213,7 @@ class ARS(Algorithm):
             'normalizer_n': self.policy.n,
             'normalizer_means': self.policy.mu,
             'normalizer_vars': self.policy.var
-        })
+        }, save_path)
 
         # Clean up any garbage that's accrued
         gc.collect()
@@ -262,7 +271,7 @@ class ARS(Algorithm):
                 avg_steps = 0.0
                 avg_reward = 0.0
                 for j in range(self.num_evals):
-                    eval_steps, reward, done, exit_cond = self.evaluate_model(self.eval_len)
+                    reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
                     # Log the evaluation run
                     with open(self.log_save_name, "a") as myfile:
@@ -292,7 +301,10 @@ class ARS(Algorithm):
         training_time = t_train - t_start - evaluation_time
 
         # Evaluate and save the final learned model
-        final_policy_reward_sum, _, _, _ = self.evaluate_model(self.eval_len)
+        final_policy_reward_sum, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
+        with open(self.log_save_name, "a") as myfile:
+            myfile.write(str(step) + ', ' + str(training_time) + ', ' + str(eval_steps) + ', ' +
+                         str(final_policy_reward_sum) + ', ' + str(done) + ', ' + str(exit_cond) + '\n')
         print('saving...')
         save_path = self.save_path + '/final_model.pth'
         self.save_model(save_path=save_path)
@@ -318,7 +330,7 @@ class ARS(Algorithm):
         indexes = np.argsort(max_r)  # Indexes are arranged for smallest to largest
 
         sum_augs = np.zeros_like(self.policy.theta)
-        l = len(indexes)
+        l = len(indexes) - 1
         r_2b = []
         for i in range(self.b):
             k = indexes[l - i]

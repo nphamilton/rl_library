@@ -18,7 +18,7 @@ class ARSPolicy(object):
         self.theta = np.zeros([num_actions, num_observations], dtype=float)
         self.n = 0.0
         self.mu = np.zeros((num_observations,), dtype=float)
-        self.var = np.zeros((num_observations,), dtype=float)
+        self.var = np.ones((num_observations,), dtype=float)
         self.std = np.sqrt(self.var)
         self.is_evaluating = True
 
@@ -63,6 +63,7 @@ class ARSPolicy(object):
                                                 that are each the same size as the policy weights.
         """
 
+        # TODO: look into how using np.random.normal() instead effects results
         noise_profiles = np.random.rand(num_profiles, self.theta.shape[0], self.theta.shape[1])
 
         return noise_profiles
@@ -108,11 +109,13 @@ class ARSPolicy(object):
 
         # Compute the new mean
         new_mu = (n1 * self.mu + n2 * self.buffer_mu) / n
+        # print('new mu: ' + str(new_mu))
 
         # Compute the new variance
         old_s = self.var * (self.n - 1)
         new_s = old_s + self.buffer_s + delta2 * n1 * n2 / n
         new_var = new_s / (n - 1)
+        # print('new var: ' + str(new_var))
 
         # Update values
         self.n = n
@@ -123,7 +126,7 @@ class ARSPolicy(object):
         # Clear the buffers
         self.buffer_n = 0.0
         self.buffer_mu = np.zeros_like(new_mu)
-        self.buffer_s = np.zeros(new_s)
+        self.buffer_s = np.zeros_like(new_s)
 
         """
         NOTE: This bit is added according to the original implementation found at
