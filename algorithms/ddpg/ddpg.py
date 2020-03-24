@@ -49,6 +49,7 @@ class DDPG(Algorithm):
         :param random_seed:          (int)    The random seed value to use for the whole training process.
         :param replay_capacity:      (int)
         :param batch_size:           (int)
+        TODO: NN architecture info
         :param actor_learning_rate:  (float)
         :param critic_learning_rate: (float)
         :param weight_decay:         (float)
@@ -87,12 +88,16 @@ class DDPG(Algorithm):
         torch.cuda.manual_seed_all(random_seed)
 
         # Create the actor and critic neural network
-        self.actor = DDPGActor(num_inputs=4, hidden_size1=400, hidden_size2=300, num_actions=2, final_bias=3e-3).to(self.device)
-        self.critic = DDPGCritic(num_inputs=4, hidden_size1=400, hidden_size2=300, num_actions=2, final_bias=3e-3).to(self.device)
+        self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+                               num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        self.critic = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+                                 num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
 
         # Create the target networks
-        self.actor_target = DDPGActor(num_inputs=4, hidden_size1=400, hidden_size2=300, num_actions=2, final_bias=3e-3).to(self.device)
-        self.critic_target = DDPGCritic(num_inputs=4, hidden_size1=400, hidden_size2=300, num_actions=2, final_bias=3e-3).to(self.device)
+        self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+                                      num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        self.critic_target = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+                                        num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
 
         # Create the optimizers for the actor and critic neural networks
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -142,7 +147,7 @@ class DDPG(Algorithm):
         reward_sum = 0
 
         # Start the evaluation from a safe starting point
-        self.runner.reset()
+        self.runner.reset(evaluate=True)
         state = self.runner.get_state()
         done = 0
         exit_cond = 0
@@ -179,7 +184,7 @@ class DDPG(Algorithm):
 
         # Get the initial state information and reset the Ornstein-Uhlenbeck noise
         self.noise.reset()
-        state, _ = self.runner.get_state()
+        state = self.runner.get_state()
 
         # during exploration, update after every step
         while steps_taken < num_steps:
@@ -279,6 +284,7 @@ class DDPG(Algorithm):
         step = 0
         eval_count = 0
         evaluation_time = 0.0
+        self.runner.reset()
 
         # Iterate through a sufficient number of steps broken into horizons
         while step < self.num_training_steps:
@@ -296,7 +302,7 @@ class DDPG(Algorithm):
                 avg_steps = 0.0
                 avg_reward = 0.0
                 for j in range(self.num_evals):
-                    eval_steps, reward, done, exit_cond = self.evaluate_model(self.eval_len)
+                    reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
                     # Log the evaluation run
                     with open(self.log_save_name, "a") as myfile:

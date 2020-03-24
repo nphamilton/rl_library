@@ -85,14 +85,15 @@ class Runner(ABC):
         pass
 
     @abstractmethod
-    def reset(self):
+    def reset(self, evaluate=False):
         """
         This function should reset the environment. In the case of a simulation, this should take the agent back to a
         safe starting point. In a real-world system, this might involve halting until a resume signal has been sent
         allowing the user to move the agent to a safe starting location.
 
         :input:
-            None
+            evaluate    (bool) When this is true, the environment should reset to set starting point for consistent
+                                evaluation
         :output:
             Nothing is returned from this function.
         """

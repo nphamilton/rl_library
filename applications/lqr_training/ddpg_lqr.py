@@ -3,7 +3,7 @@ TODO header
 """
 import numpy as np
 
-from algorithms.ars.ars import *
+from algorithms.ddpg.ddpg import *
 from runners.lqr import *
 
 if __name__ == '__main__':
@@ -19,10 +19,12 @@ if __name__ == '__main__':
                        input_cost=input_cost, cross_term=None, horizon_length=lqr_horizon_length)
 
     # Create the learner
-    learner = ARS(runner=runner, num_training_steps=100000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
-                  exploration_noise=0.02, rollout_length=lqr_horizon_length, evaluation_length=lqr_horizon_length,
-                  evaluation_iter=1,
-                  num_evaluations=1, random_seed=1946, log_path='.', save_path='.')
+    learner = DDPG(runner=runner, num_training_steps=1000, time_per_step=1., rollout_length=lqr_horizon_length,
+                   evaluation_length=lqr_horizon_length, evaluation_iter=10,
+                   num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100, actor_learning_rate=1e-4,
+                   critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2,
+                   noise_theta=0.15,
+                   log_path='.', save_path='.', load_path=None)
 
     final_policy_reward_sum, execution_time, training_time = learner.train_model()
     print('Final Evaluation Reward: ' + str(final_policy_reward_sum))
