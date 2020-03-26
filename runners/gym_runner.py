@@ -13,7 +13,7 @@ from runners.abstract_runner import Runner
 
 
 class GymRunner(Runner):
-    def __init__(self, env_name='CartPole-v0', render=False):
+    def __init__(self, env_name='CartPole-v0', render=True):
         """
         A runner works as an interface between the learning agent and the learning environment. Anything the agent wants to
         do in the environment should be run through a runner. Each environment should gets its own style of runner because
@@ -26,14 +26,17 @@ class GymRunner(Runner):
         Additionally, every runner should have the following class variables:
             obs_shape     (np.ndarray or np.array)
             action_shape  (np.array)
+            is_discrete   (bool)
         """
 
         # Save input parameters
+        self.render = render
 
         # Create the gym environment
         self.env = gym.make(env_name)
 
         # Declare the values for the required variables
+        self.is_discrete = False
         self.obs_shape = np.asarray(self.env.observation_space.shape)
         print(self.obs_shape)
         self.action_shape = np.asarray(self.env.action_space.shape)
@@ -79,9 +82,13 @@ class GymRunner(Runner):
         :output:
             return next_state, reward, done, exit_cond
         """
-        if render:
+        if render and self.render:
             self.env.render()
-        next_state, reward, done, info = self.env.step(action)
+
+        if self.is_discrete:
+            next_state, reward, done, info = self.env.step(self.actions[action])
+        else:
+            next_state, reward, done, info = self.env.step(action)
         exit_cond = 0
 
         self.state = next_state

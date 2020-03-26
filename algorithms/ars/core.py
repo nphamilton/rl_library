@@ -10,7 +10,7 @@ import numpy as np
 
 
 class ARSPolicy(object):
-    def __init__(self, num_observations, num_actions):
+    def __init__(self, num_observations, num_actions, discrete):
         """
         This method implements the linear policy described in the original paper and implementation.
         """
@@ -21,6 +21,7 @@ class ARSPolicy(object):
         self.var = np.ones((num_observations,), dtype=float)
         self.std = np.sqrt(self.var)
         self.is_evaluating = True
+        self.is_discrete = discrete
 
         # Initialize the buffer variables for recording and updating the normalizing variables
         self.buffer_n = 0.0
@@ -33,9 +34,9 @@ class ARSPolicy(object):
         not evaluating, this method records the state information in the form of a running average and standard
         deviation.
 
-        :param state:   (np.array)   The input state
-        :param weights: (np.ndarray) Optional input for following a different set of weights
-        :return action: (np.array)   The desired action
+        :param state:   (np.array)           The input state
+        :param weights: (np.ndarray)         Optional input for following a different set of weights
+        :return action: (np.array  or int)   The desired action (will be an index if the action space is discrete
         """
         # Record state info if not evaluating
         if not self.is_evaluating:
@@ -51,6 +52,10 @@ class ARSPolicy(object):
             assert weights.shape == self.theta.shape, \
                 ("weights.shape = {}, theta.shape = {}".format(weights.shape, self.theta.shape))
             action = weights.dot(state)
+
+        # Return the index of the maximum value from the action if the action space is discrete
+        if self.is_discrete:
+            action = np.argmax(action)
 
         return action
 

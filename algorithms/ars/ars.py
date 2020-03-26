@@ -63,6 +63,7 @@ class ARS(Algorithm):
 
         # Save all parameters
         self.runner = runner
+        self.is_discrete = runner.is_discrete
         self.alpha = step_size
         self.N = dirs_per_iter
         self.nu = exploration_noise
@@ -78,7 +79,8 @@ class ARS(Algorithm):
         np.random.seed(random_seed)
 
         # Create the policy
-        self.policy = ARSPolicy(num_observations=runner.obs_shape[0], num_actions=runner.action_shape[0])
+        self.policy = ARSPolicy(num_observations=runner.obs_shape[0], num_actions=runner.action_shape[0],
+                                discrete=self.is_discrete)
         if load_path is not None:
             self.load_model(load_path)
 
@@ -367,7 +369,7 @@ class ARS(Algorithm):
 
         # Sort the rewards in descending order according to max{r_pos, r_neg}
         max_r = np.maximum(rewards_pos, rewards_neg)
-        print(max_r)
+        # print(max_r)
         indexes = np.argsort(max_r)  # Indexes are arranged from smallest to largest
 
         sum_augs = np.zeros_like(self.policy.theta)
@@ -381,7 +383,7 @@ class ARS(Algorithm):
 
         # Calculate the standard deviation of the rewards used for the update. This is used for scaling.
         sigma_r = np.std(np.asarray(r_2b))
-        # print(sigma_r)
+        # print((self.alpha / (self.b * sigma_r)) * sum_augs)
 
         # Compute the new policy weights
         new_policy = self.policy.theta + ((self.alpha / (self.b * sigma_r)) * sum_augs)

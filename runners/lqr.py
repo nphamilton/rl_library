@@ -2,7 +2,7 @@
 File:   lqr.py
 Author: Nathaniel Hamilton
 
-Description:    This runner...TODO
+Description:    This runner simulates a Linear Quadratic Regression (LQR) system.
 
 
 """
@@ -40,6 +40,7 @@ class LQRRunner(Runner):
         # Establish the required variables for learning algorithms to access
         self.obs_shape = np.array([len(state_cost)])
         self.action_shape = np.array([len(input_cost)])
+        self.is_discrete = False
 
         # Initialize variables
         self.state = None
@@ -76,6 +77,7 @@ class LQRRunner(Runner):
 
         # Record the state
         x = self.state
+        # print(x)
 
         # Compute the next state and the accumulated cost
         x_next = np.dot(self.A, x) + np.dot(self.B, action)  # + np.random.normal(0, 1, size=self.obs_shape)

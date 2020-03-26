@@ -26,6 +26,7 @@ class Runner(ABC):
     Additionally, every runner should have the following class variables:
         obs_shape     (np.ndarray or np.array)
         action_shape  (np.array)
+        is_discrete   (bool)
     """
 
     @abstractmethod
@@ -65,7 +66,7 @@ class Runner(ABC):
             4 exit condition (if the agent has reached a fatal state, this will be 1, otherwise 0)
 
         :input:
-            action  (np.array)
+            action  (np.array or int)
             render  (bool)
         :output:
             return next_state, reward, done, exit_cond
