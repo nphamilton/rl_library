@@ -36,11 +36,16 @@ class GymRunner(Runner):
         self.env = gym.make(env_name)
 
         # Declare the values for the required variables
-        self.is_discrete = False
         self.obs_shape = np.asarray(self.env.observation_space.shape)
-        print(self.obs_shape)
-        self.action_shape = np.asarray(self.env.action_space.shape)
-        print(self.env.action_space.shape)
+        # print(self.obs_shape)
+        if len(self.env.action_space.shape) == 0:
+            self.is_discrete = True
+            self.action_shape = np.asarray([self.env.action_space.n])
+            print(self.action_shape)
+        else:
+            self.is_discrete = False
+            self.action_shape = np.asarray(self.env.action_space.shape)
+            # print(self.env.action_space.shape)
 
         self.state = np.zeros(self.obs_shape)
 
@@ -78,17 +83,14 @@ class GymRunner(Runner):
             4 exit condition (if the agent has reached a fatal state, this will be 1, otherwise 0)
 
         :input:
-            action  (np.array)
+            action  (np.array or int)
         :output:
             return next_state, reward, done, exit_cond
         """
         if render and self.render:
             self.env.render()
 
-        if self.is_discrete:
-            next_state, reward, done, info = self.env.step(self.actions[action])
-        else:
-            next_state, reward, done, info = self.env.step(action)
+        next_state, reward, done, info = self.env.step(action)
         exit_cond = 0
 
         self.state = next_state

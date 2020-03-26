@@ -13,7 +13,7 @@ if __name__ == '__main__':
     state_cost = np.ones(3) / 1000
     input_cost = np.ones(3)
     lqr_horizon_length = 300
-    environment_name = 'MountainCarContinuous-v0'  # 'Pendulum-v0'
+    environment_name = 'CartPole-v1'  # 'MountainCarContinuous-v0'  # 'Pendulum-v0'
 
     # Create the runner
     runner = GymRunner(env_name=environment_name, render=False)
