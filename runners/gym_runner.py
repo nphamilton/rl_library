@@ -1,34 +1,46 @@
 """
-File:   abstract_runner.py
+File:   gym_runner.py
 Author: Nathaniel Hamilton
 
-Description:    A runner works as an interface between the learning agent and the learning environment. Anything the
-                agent wants to do in the environment should be run through a runner. Each environment should gets its
-                own style of runner because every environment operates differently.
-
-Usage:          This class should be inherited by each implemented runner class in order to enforce consistency.
+Description:
 
 """
 
-from abc import ABC, abstractmethod
+import numpy as np
+import gym
+
+from runners.abstract_runner import Runner
 
 
-class Runner(ABC):
-    """
-    A runner works as an interface between the learning agent and the learning environment. Anything the agent wants to
-    do in the environment should be run through a runner. Each environment should gets its own style of runner because
-    every environment operates differently.
+class GymRunner(Runner):
+    def __init__(self, env_name='CartPole-v0', render=False):
+        """
+        A runner works as an interface between the learning agent and the learning environment. Anything the agent wants to
+        do in the environment should be run through a runner. Each environment should gets its own style of runner because
+        every environment operates differently.
 
-    Any method not included in this list should be preceded with __ to denote that is is unique to this specific
-    runner. e.g.
-        def __other_method(self): return
+        Any method not included in this list should be preceded with __ to denote that is is unique to this specific
+        runner. e.g.
+            def __other_method(self): return
 
-    Additionally, every runner should have the following class variables:
-        obs_shape     (np.ndarray or np.array)
-        action_shape  (np.array)
-    """
+        Additionally, every runner should have the following class variables:
+            obs_shape     (np.ndarray or np.array)
+            action_shape  (np.array)
+        """
 
-    @abstractmethod
+        # Save input parameters
+
+        # Create the gym environment
+        self.env = gym.make(env_name)
+
+        # Declare the values for the required variables
+        self.obs_shape = np.asarray(self.env.observation_space.shape)
+        print(self.obs_shape)
+        self.action_shape = np.asarray(self.env.action_space.shape)
+        print(self.env.action_space.shape)
+
+        self.state = np.zeros(self.obs_shape)
+
     def get_state(self):
         """
         This function should return the current state of the agent in the environment. No reward or status of done or
@@ -39,9 +51,8 @@ class Runner(ABC):
         :output:
             return curr_state
         """
-        pass
+        return self.state
 
-    @abstractmethod
     def is_available(self):
         """
         This method checks to make sure the environment is still available. Some environments are able to discontinue
@@ -52,9 +63,8 @@ class Runner(ABC):
         :output:
             return 0/1 (0 if unavailable, 1 if available)
         """
-        pass
+        return 1
 
-    @abstractmethod
     def step(self, action, render=False):
         """
         This function should execute a single step within the environment and return all necessary information
@@ -66,13 +76,18 @@ class Runner(ABC):
 
         :input:
             action  (np.array)
-            render  (bool)
         :output:
             return next_state, reward, done, exit_cond
         """
-        pass
+        if render:
+            self.env.render()
+        next_state, reward, done, info = self.env.step(action)
+        exit_cond = 0
 
-    @abstractmethod
+        self.state = next_state
+
+        return next_state, reward, done, exit_cond
+
     def stop(self):
         """
         This method should stop the agent from continuing any further actions. This could be a halt, or a termination of
@@ -85,7 +100,6 @@ class Runner(ABC):
         """
         pass
 
-    @abstractmethod
     def reset(self, evaluate=False):
         """
         This function should reset the environment. In the case of a simulation, this should take the agent back to a
@@ -98,6 +112,8 @@ class Runner(ABC):
         :output:
             Nothing is returned from this function.
         """
-        pass
+        self.state = self.env.reset()
+
+        return
 
 

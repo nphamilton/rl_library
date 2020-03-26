@@ -59,13 +59,14 @@ class LQRRunner(Runner):
         """
         return True
 
-    def step(self, action):
+    def step(self, action, render=False):
         """
         This function executes as single step of the LQR system. For more information about how a LQR step works, look
         at the Wikipedia article https://en.wikipedia.org/wiki/Linear%E2%80%93quadratic_regulator
 
         :input:
             :param action:  (np.array)
+            :param render:  (bool)
         :outputs:
             :return next_state:
             :return reward:
@@ -77,7 +78,7 @@ class LQRRunner(Runner):
         x = self.state
 
         # Compute the next state and the accumulated cost
-        x_next = np.dot(self.A, x) + np.dot(self.B, action)
+        x_next = np.dot(self.A, x) + np.dot(self.B, action)  # + np.random.normal(0, 1, size=self.obs_shape)
         cost = np.dot(x.T, np.dot(self.Q, x)) + np.dot(action.T, np.dot(self.R, action)) + 2 * \
                np.dot(x.T, np.dot(self.N, action))
         self.time += 1
@@ -89,7 +90,7 @@ class LQRRunner(Runner):
 
         # Convert values to outputs
         next_state = x_next
-        reward = 1 * cost
+        reward = -1 * cost
         exit_cond = 0
 
         return next_state, reward, done, exit_cond
