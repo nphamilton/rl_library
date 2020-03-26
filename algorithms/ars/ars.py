@@ -303,7 +303,7 @@ class ARS(Algorithm):
             self.update_model(rewards_pos, rewards_neg, noise)
 
             # Update normalization parameters in the policy
-            self.policy.update_norm()
+            # self.policy.update_norm()
 
             # Evaluate the model
             eval_count += 1
@@ -337,7 +337,7 @@ class ARS(Algorithm):
                 evaluation_time += t_eval_end - t_eval_start
 
             # # Update normalization parameters in the policy
-            # self.policy.update_norm()
+            self.policy.update_norm()
 
         t_train = time.time()
         training_time = t_train - t_start - evaluation_time
@@ -383,6 +383,11 @@ class ARS(Algorithm):
 
         # Calculate the standard deviation of the rewards used for the update. This is used for scaling.
         sigma_r = np.std(np.asarray(r_2b))
+        # As this value gets smaller when approaching convergence, make sure there is no divide by 0
+        if sigma_r > float(1e-7):
+            sigma_r = sigma_r
+        else:
+            sigma_r = float("inf")
         # print((self.alpha / (self.b * sigma_r)) * sum_augs)
 
         # Compute the new policy weights
