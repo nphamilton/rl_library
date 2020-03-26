@@ -90,6 +90,10 @@ class ARS(Algorithm):
         f.write("training steps, time, steps in evaluation, accumulated reward, done, exit condition \n")
         f.close()
 
+        # Make sure the save path exists
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+
     def __do_rollout(self, weights):
         """
         This method performs a single rollout using the specified weights.
@@ -151,7 +155,7 @@ class ARS(Algorithm):
         self.policy.is_evaluating = True
 
         # Start the evaluation from a safe starting point
-        self.runner.reset()
+        self.runner.reset(evaluate=True)
         state = self.runner.get_state()
         done = 0
         exit_cond = 0
@@ -167,7 +171,7 @@ class ARS(Algorithm):
             action = self.policy.get_action(state)
 
             # Execute determined action
-            next_state, reward, done, exit_cond = self.runner.step(action)
+            next_state, reward, done, exit_cond = self.runner.step(action, render=True)
 
             # Update for next step
             reward_sum += reward
@@ -239,7 +243,40 @@ class ARS(Algorithm):
         eval_count = 0
         evaluation_time = 0.0
 
+        # Evaluate the starting policy
+        t_eval_start = time.time()
+        log_time = t_eval_start - t_start - evaluation_time
+        avg_steps = 0.0
+        avg_reward = 0.0
+        for j in range(self.num_evals):
+            reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
+
+            # Log the evaluation run
+            with open(self.log_save_name, "a") as myfile:
+                myfile.write(str(step) + ', ' + str(log_time) + ', ' + str(eval_steps) + ', ' + str(reward) +
+                             ', ' + str(done) + ', ' + str(exit_cond) + '\n')
+
+            avg_steps += eval_steps
+            avg_reward += reward
+
+        # Print the average results for the user to debugging
+        print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps / self.num_evals) +
+              ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
+
+        # Save the model that achieved this performance
+        print('saving...')
+        save_path = self.save_path + '/step_' + str(step) + '_model.pth'
+        self.save_model(save_path=save_path)
+
+        # Do not count the time taken to evaluate and save the model as training time
+        t_eval_end = time.time()
+        evaluation_time += t_eval_end - t_eval_start
+
+        # Train until the maximum number of steps has been reached or passed
         while step < self.num_training_steps:
+
+            eval_count += 1
+
             # Sample N noise profiles
             noise = self.policy.get_noise(self.N)
 
@@ -263,6 +300,9 @@ class ARS(Algorithm):
             # Update the model
             self.update_model(rewards_pos, rewards_neg, noise)
 
+            # Update normalization parameters in the policy
+            self.policy.update_norm()
+
             # Evaluate the model
             eval_count += 1
             if eval_count % self.eval_iter == 0:
@@ -282,8 +322,8 @@ class ARS(Algorithm):
                     avg_reward += reward
 
                 # Print the average results for the user to debugging
-                print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps/self.num_evals) +
-                      ', Avg Acc Reward: ' + str(avg_reward/self.num_evals))
+                print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps / self.num_evals) +
+                      ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
 
                 # Save the model that achieved this performance
                 print('saving...')
@@ -294,8 +334,8 @@ class ARS(Algorithm):
                 t_eval_end = time.time()
                 evaluation_time += t_eval_end - t_eval_start
 
-            # Update normalization parameters in the policy
-            self.policy.update_norm()
+            # # Update normalization parameters in the policy
+            # self.policy.update_norm()
 
         t_train = time.time()
         training_time = t_train - t_start - evaluation_time
@@ -327,7 +367,8 @@ class ARS(Algorithm):
 
         # Sort the rewards in descending order according to max{r_pos, r_neg}
         max_r = np.maximum(rewards_pos, rewards_neg)
-        indexes = np.argsort(max_r)  # Indexes are arranged for smallest to largest
+        print(max_r)
+        indexes = np.argsort(max_r)  # Indexes are arranged from smallest to largest
 
         sum_augs = np.zeros_like(self.policy.theta)
         l = len(indexes) - 1
@@ -335,14 +376,16 @@ class ARS(Algorithm):
         for i in range(self.b):
             k = indexes[l - i]
             sum_augs += (rewards_pos[k] - rewards_neg[k]) * noise[k]
-            r_2b.append(rewards_pos[k])
+            r_2b.append(rewards_pos[k])  # - rewards_neg[k])
             r_2b.append(rewards_neg[k])
 
         # Calculate the standard deviation of the rewards used for the update. This is used for scaling.
         sigma_r = np.std(np.asarray(r_2b))
+        # print(sigma_r)
 
         # Compute the new policy weights
-        new_policy = self.policy.theta + (self.alpha / (self.b * sigma_r)) * sum_augs
+        new_policy = self.policy.theta + ((self.alpha / (self.b * sigma_r)) * sum_augs)
+        # print(new_policy)
 
         # Update the policy
         self.policy.theta = new_policy

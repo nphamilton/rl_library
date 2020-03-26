@@ -16,7 +16,7 @@ class ARSPolicy(object):
         """
         # Initialize the variables accessible to the learning algorithm
         self.theta = np.zeros([num_actions, num_observations], dtype=float)
-        self.n = 0.0
+        self.n = 1.0
         self.mu = np.zeros((num_observations,), dtype=float)
         self.var = np.ones((num_observations,), dtype=float)
         self.std = np.sqrt(self.var)
@@ -64,7 +64,8 @@ class ARSPolicy(object):
         """
 
         # TODO: look into how using np.random.normal() instead effects results
-        noise_profiles = np.random.rand(num_profiles, self.theta.shape[0], self.theta.shape[1])
+        noise_profiles = np.random.normal(0, 1, size=(num_profiles, self.theta.shape[0], self.theta.shape[1]))
+        # noise_profiles = np.random.randn(num_profiles, self.theta.shape[0], self.theta.shape[1])
 
         return noise_profiles
 
@@ -82,7 +83,7 @@ class ARSPolicy(object):
         In order to compute a running average and variance during the exploration phase, this method computes and stores
         the values. To incorporate them into the model, update_norm() must be run.
 
-        Method addapted from https://www.johndcook.com/blog/standard_deviation/
+        Method adapted from https://www.johndcook.com/blog/standard_deviation/
 
         :param state:   (np.array) The input state
         """
@@ -113,6 +114,8 @@ class ARSPolicy(object):
 
         # Compute the new variance
         old_s = self.var * (self.n - 1)
+        old_s[old_s < 0.0] = 0.0
+        # print(old_s)
         new_s = old_s + self.buffer_s + delta2 * n1 * n2 / n
         new_var = new_s / (n - 1)
         # print('new var: ' + str(new_var))
@@ -135,7 +138,8 @@ class ARSPolicy(object):
         # Set values for std less than 1e-7 to +inf to avoid
         # dividing by zero. State elements with zero variance
         # are set to zero as a result.
-        self.std[self.std < 1e-7] = float("inf")
+        # print(self.std)
+        self.std[self.std < float(1e-7)] = float("inf")
 
         return
 

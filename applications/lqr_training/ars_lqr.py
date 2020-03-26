@@ -19,10 +19,11 @@ if __name__ == '__main__':
                        input_cost=input_cost, cross_term=None, horizon_length=lqr_horizon_length)
 
     # Create the learner
-    learner = ARS(runner=runner, num_training_steps=100000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
+    learner = ARS(runner=runner, num_training_steps=1000000, step_size=0.02, dirs_per_iter=16, num_top_performers=4,
                   exploration_noise=0.02, rollout_length=lqr_horizon_length, evaluation_length=lqr_horizon_length,
                   evaluation_iter=1,
-                  num_evaluations=1, random_seed=1946, log_path='.', save_path='.')
+                  num_evaluations=1, random_seed=1946, log_path='~/rl_library/applications/lqr_training/ars_log',
+                  save_path='~/rl_library/applications/lqr_training/ars_models')
 
     final_policy_reward_sum, execution_time, training_time = learner.train_model()
     print('Final Evaluation Reward: ' + str(final_policy_reward_sum))
