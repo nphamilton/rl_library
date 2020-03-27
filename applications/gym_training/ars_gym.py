@@ -8,8 +8,8 @@ from runners.gym_runner import *
 
 if __name__ == '__main__':
     # Declare all the variables
-    rollout_length = 300
-    environment_name = 'CartPole-v1'  # 'MountainCarContinuous-v0'  # 'Pendulum-v0'
+    rollout_length = 200
+    environment_name = 'Pendulum-v0'  # 'MountainCarContinuous-v0'  # 'CartPole-v1'
 
     # Create the runner
     runner = GymRunner(env_name=environment_name, render=True)
