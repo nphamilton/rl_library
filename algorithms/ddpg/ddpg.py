@@ -64,6 +64,7 @@ class DDPG(Algorithm):
 
         # Save all parameters
         self.runner = runner
+        self.is_discrete = runner.is_discrete
         self.H = rollout_length
         self.eval_len = evaluation_length
         self.eval_iter = evaluation_iter
@@ -121,9 +122,14 @@ class DDPG(Algorithm):
         f.write("training steps, time, steps in evaluation, accumulated reward, done, exit condition \n")
         f.close()
 
+        # Make sure the save path exists
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+
         # Initialize variables used by the learner
         self.replay_buffer = ReplayBuffer(self.capacity)
-        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.asarray([0, 0]), sigma=(noise_sigma * np.asarray([1, 1])),
+        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(runner.action_shape),
+                                                  sigma=(noise_sigma * np.ones(runner.action_shape)),
                                                   theta=noise_theta, dt=time_per_step)
 
     def evaluate_model(self, evaluation_length=-1):
@@ -163,7 +169,7 @@ class DDPG(Algorithm):
             action = self.get_action(state)  # No noise injected during evaluation
 
             # Execute determined action
-            next_state, reward, done, exit_cond = self.runner.step(action)
+            next_state, reward, done, exit_cond = self.runner.step(action, render=True)
 
             # Update for next step
             reward_sum += reward
@@ -201,9 +207,9 @@ class DDPG(Algorithm):
             # Only update if the replay buffer is full
             if len(self.replay_buffer.rewards) >= self.batch_size:
                 # Update the neural networks using a random sampling of the replay buffer
-                mb_states, mb_actions, mb_rewards, mb_dones, mb_next_states = self.replay_buffer.sample_batch(
+                mb_states, mb_actions, mb_rewards, mb_dones, mb_exits, mb_next_states = self.replay_buffer.sample_batch(
                     self.batch_size)
-                self.update_model(mb_states, mb_actions, mb_rewards, mb_dones, mb_next_states)
+                self.update_model(mb_states, mb_actions, mb_rewards, mb_dones, mb_exits, mb_next_states)
 
             # Only reset the environment if a terminal state has been reached
             if done == 1 or exit_cond == 1:
@@ -217,7 +223,7 @@ class DDPG(Algorithm):
 
         return
 
-    def get_action(self, state, noise=np.asarray([0, 0])):
+    def get_action(self, state, noise=None):
         """
         This function calculates the desired output using the NN and the exploration noise.
 
@@ -235,7 +241,8 @@ class DDPG(Algorithm):
         action = action.cpu()
 
         # Add the process noise to the action
-        action = action + torch.FloatTensor(noise).cpu()
+        if noise is not None:
+            action = action + torch.FloatTensor(noise).cpu()
         action = action.clamp(-1.0, 1.0)  # Make sure action cannot exceed limits
 
         # Convert to numpy array
@@ -284,6 +291,35 @@ class DDPG(Algorithm):
         step = 0
         eval_count = 0
         evaluation_time = 0.0
+
+        # Evaluate once before training
+        t_eval_start = time.time()
+        log_time = t_eval_start - t_start - evaluation_time
+        avg_steps = 0.0
+        avg_reward = 0.0
+        for j in range(self.num_evals):
+            reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
+
+            # Log the evaluation run
+            with open(self.log_save_name, "a") as myfile:
+                myfile.write(str(step) + ', ' + str(log_time) + ', ' + str(eval_steps) + ', ' + str(reward) +
+                             ', ' + str(done) + ', ' + str(exit_cond) + '\n')
+
+            avg_steps += eval_steps
+            avg_reward += reward
+
+        # Print the average results for the user to debugging
+        print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps / self.num_evals) +
+              ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
+
+        # Save the model that achieved this performance
+        print('saving...')
+        save_path = self.save_path + '/step_' + str(step) + '_model.pth'
+        self.save_model(save_path=save_path)
+
+        # Do not count the time taken to evaluate and save the model as training time
+        t_eval_end = time.time()
+        evaluation_time += t_eval_end - t_eval_start
         self.runner.reset()
 
         # Iterate through a sufficient number of steps broken into horizons
@@ -339,7 +375,7 @@ class DDPG(Algorithm):
 
         return final_policy_reward_sum, execution_time, training_time
 
-    def update_model(self, states, actions, rewards, dones, next_states):
+    def update_model(self, states, actions, rewards, dones, exits, next_states):
         """
         This function updates neural networks for the actor and critic using back-propogation. More information about
         this process can be found in the DDPG paper.
@@ -348,8 +384,10 @@ class DDPG(Algorithm):
             :param states:       (list)  The batch of states from the replay buffer
             :param actions:      (list)  The batch of actions from the replay buffer
             :param rewards:      (list)  The batch of rewards from the replay buffer
-            :param dones:        (list)  The batch of done values (1 indicates crash, 0 indicates no crash) from the
+            :param dones:        (list)  The batch of done values (1 indicates done, 0 indicates not done) from the
                                            replay buffer
+            :param exits:        (list)  The batch of exit conditions (1 indicates exited early, 0 indicates normal)
+                                           from the replay buffer
             :param next_states:  (list)  The batch of states reached after executing the actions from the replay buffer
         :outputs:
             :return actor_loss:  (float) The loss value calculated for the actor
@@ -358,9 +396,10 @@ class DDPG(Algorithm):
         # Convert the inputs into tensors to speed up computations
         batch_states = Variable(torch.FloatTensor(states).to(self.device), requires_grad=True)
         batch_actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
-        batch_rewards = Variable(torch.FloatTensor(rewards).to(self.device), requires_grad=True).unsqueeze(1)
-        batch_dones = Variable(torch.FloatTensor(dones).to(self.device), requires_grad=True).unsqueeze(1)
-        batch_next_states = Variable(torch.FloatTensor(next_states).to(self.device), requires_grad=True)
+        batch_rewards = torch.FloatTensor(rewards).to(self.device).unsqueeze(1)
+        batch_dones = torch.FloatTensor(dones).to(self.device).unsqueeze(1)
+        batch_exits = torch.FloatTensor(exits).to(self.device).unsqueeze(1)
+        batch_next_states = torch.FloatTensor(next_states).to(self.device)
 
         # Compute the critics estimated Q values
         batch_qs = self.critic.forward(batch_states, batch_actions)
@@ -373,7 +412,7 @@ class DDPG(Algorithm):
         target_next_q_batch = (self.critic_target.forward(batch_next_states, target_next_action_batch)).detach()
 
         # Compute y (a metric for computing the critic loss)
-        y = (batch_rewards + ((1 - batch_dones) * self.gamma * target_next_q_batch)).detach()
+        y = (batch_rewards + ((1 - batch_dones) * (1 - batch_exits) * self.gamma * target_next_q_batch)).detach()
 
         # Compute critic loss and update using the optimizer
         critic_loss = F.mse_loss(y, batch_qs)
