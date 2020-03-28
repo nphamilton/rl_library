@@ -9,34 +9,40 @@ Description: This class implements the associated classes for the Deep Determini
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
 import torch.nn.functional as F
 
 
 def soft_update(target, source, tau):
     """
-    TODO
-    :param target:
-    :param source:
-    :param tau:
+    This function performs a soft update between two neural networks. The target's parameters are modified towards the
+    source's by a factor of tau.
+
+    :param target:  (torch.nn)  The target neural network that is being updated
+    :param source:  (torch.nn)  The source neural network the target is updated towards
+    :param tau:     (float)     Scale value between 0 and 1
     :return:
     """
 
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
+    return
+
 
 def hard_update(target, source):
     """
-    TODO
-    :param target:
-    :param source:
+    This function performs a hard update between two neural networks. In a hard update, the parameters of the source
+    are copied to the target.
+
+    :param target:  (torch.nn)  The target neural network that is being updated
+    :param source:  (torch.nn)  The source neural network the target is updated towards
     :return:
     """
 
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
+
+    return
 
 
 def init_weights(m):
@@ -45,8 +51,11 @@ def init_weights(m):
 
     :param m: (tensor)  the layer to be orthogonally weighted.
     """
+
     if type(m) == nn.Linear:
         torch.nn.init.orthogonal_(m.weight)
+
+    return
 
 
 def fan_in_uniform_init(m):
@@ -55,8 +64,11 @@ def fan_in_uniform_init(m):
 
     :param m: (tensor) The layer to be uniformly weighted.
     """
+
     weight_range = 1.0 / np.sqrt(m.size(-1))
     nn.init.uniform_(m, -weight_range, weight_range)
+
+    return
 
 
 ########################################################################################################################
@@ -111,6 +123,8 @@ class DDPGActor(nn.Module):
         # Initialize output layer
         self.out.apply(init_weights)
 
+        return
+
     def forward(self, state):
         """
         This function performs a forward pass through the network.
@@ -118,6 +132,7 @@ class DDPGActor(nn.Module):
         :param state: (tensor)   The input state the NN uses to compute an output.
         :return mu:   (tensor)   The output of the NN, which is the action to be taken.
         """
+
         # Pass through layer 1
         x = self.linear1(state)
         x = self.ln1(x)
@@ -190,6 +205,8 @@ class DDPGCritic(nn.Module):
         # Initialize output layer
         self.out.apply(init_weights)
 
+        return
+
     def forward(self, state, action):
         """
         This function performs a forward pass through the network.
@@ -198,6 +215,7 @@ class DDPGCritic(nn.Module):
         :param action:  (tensor)    The input action for the NN to compute the state-action value.
         :return q:      (tensor)    An estimated Q-value of the input state-action pair.
         """
+
         # Pass through layer 1
         x = self.linear1(state)
         x = self.ln1(x)

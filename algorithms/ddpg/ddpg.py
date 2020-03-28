@@ -1,16 +1,14 @@
 """
-File:   abstract_algorithm.py
+File:   ddpg.py
 Author: Nathaniel Hamilton
 
-Description:
-
-Usage:          This class should be inherited by each implemented algorithm class in order to enforce consistency.
+Description:    This class implements the Deep Deterministic Policy Gradient algorithm written about in
+                https://arxiv.org/abs/1509.02971
 
 """
 
 import time
 import gc
-import math
 import os
 import numpy as np
 import torch
@@ -24,12 +22,13 @@ from algorithms.ddpg.core import *
 
 
 class DDPG(Algorithm):
-    def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
-                 num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100, actor_learning_rate=1e-4,
-                 critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2, noise_theta=0.15,
-                 log_path='.', save_path='.', load_path=None):
+    def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000,
+                 evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100,
+                 actor_learning_rate=1e-4, critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001,
+                 noise_sigma=0.2, noise_theta=0.15, log_path='.', save_path='.', load_path=None):
         """
-
+        This class implements the Deep Deterministic Policy Gradient algorithm written about in
+        https://arxiv.org/abs/1509.02971
 
         The input names are descriptive of variable's meaning, but within the class, the variable names from the paper
         are used.
@@ -47,19 +46,20 @@ class DDPG(Algorithm):
                                                 complete at lease 3 evaluation traces to account for the variance in
                                                 transition probabilities.
         :param random_seed:          (int)    The random seed value to use for the whole training process.
-        :param replay_capacity:      (int)
-        :param batch_size:           (int)
+        :param replay_capacity:      (int)    The capacity of the replay buffer. It will never hold more than this many
+                                                memories.
+        :param batch_size:           (int)    Number of memories to sample for each update.
         TODO: NN architecture info
-        :param actor_learning_rate:  (float)
-        :param critic_learning_rate: (float)
-        :param weight_decay:         (float)
-        :param gamma:                (float)
-        :param tau:                  (float)
-        :param noise_sigma:          (float)
-        :param noise_theta:          (float)
-        :param log_path:             (str)
-        :param save_path:            (str)
-        :param load_path:            (str)
+        :param actor_learning_rate:  (float)  The learning rate for the Adam optimizer updating the actor.
+        :param critic_learning_rate: (float)  The learning rate for the Adam optimizer updating the critic.
+        :param weight_decay:         (float)  Weight decay for Adam optimizer updating the critic.
+        :param gamma:                (float)  Discount factor for computing returns.
+        :param tau:                  (float)  Soft update factor.
+        :param noise_sigma:          (float)  Standard deviation of exploration noise.
+        :param noise_theta:          (float)  Theta parameter for Ornstein-Uhlenbeck exploration noise.
+        :param log_path:             (str)    File path to directory where episode_performance.csv will be saved.
+        :param save_path:            (str)    File path to directory where all models will be saved.
+        :param load_path:            (str)    File path to initial model to be loaded.
         """
 
         # Save all parameters
@@ -108,8 +108,8 @@ class DDPG(Algorithm):
         # Initialize the target NNs or load models
         if (load_path is None) or (load_path == 'None'):
             # Targets are copied with a hard update
-            hard_update(self.actor_target, self.actor)
-            hard_update(self.critic_target, self.critic)
+            hard_update(target=self.actor_target, source=self.actor)
+            hard_update(target=self.critic_target, source=self.critic)
 
         else:
             self.load_model(load_path)
@@ -180,9 +180,9 @@ class DDPG(Algorithm):
 
     def __explore(self, num_steps):
         """
-        Execute random actions
-        :param num_steps:
-        :return:
+        Execute random actions exploring the environment updating after each step.
+
+        :param num_steps:   (int)   The number of steps to perform during the exploration.
         """
 
         # Initialize variables
@@ -252,26 +252,62 @@ class DDPG(Algorithm):
 
     def load_model(self, load_path):
         """
-        This method loads a model. The loaded model can be a previously learned policy or an initializing policy used
-        for consistency.
+        This function loads the neural network models and optimizers for both the actor and the critic from one file.
+        If a load_path is not provided, the function will not execute. For more examples on how to save/load models,
+        visit https://pytorch.org/tutorials/beginner/saving_loading_models.html
 
-        :input:
-            load_path
-        :output:
-            None
+        :param load_path:  (string) The file name where the models will be loaded from. default=None
         """
-        pass
+
+        # Load the saved file as a dictionary
+        if load_path is not None:
+            checkpoint = torch.load(load_path)
+
+            # Store the saved models
+            self.actor.load_state_dict(checkpoint['actor'])
+            self.critic.load_state_dict(checkpoint['critic'])
+            self.actor_target.load_state_dict(checkpoint['actor_target'])
+            self.critic_target.load_state_dict(checkpoint['critic_target'])
+            self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
+            self.replay_buffer = ReplayBuffer(checkpoint['replay_buffer'])
+
+            # Evaluate the neural networks to ensure the weights were properly loaded
+            self.actor.eval()
+            self.critic.eval()
+            self.actor_target.eval()
+            self.critic_target.eval()
+
+        # Clean up any garbage that's accrued
+        gc.collect()
+
+        return
 
     def save_model(self, save_path):
         """
-        This method saves the current model learned by the agent.
+        This method saves the neural network models and optimizers for both the actor and the critic in one file. For
+        more examples on how to save/load models, visit
+        https://pytorch.org/tutorials/beginner/saving_loading_models.html
 
         :input:
-            save_path
-        :output:
-            None
+            :param save_path: (string) The file name the model will be saved to. Default='model.pth'
         """
-        pass
+
+        # Save everything necessary to start up from this point
+        torch.save({
+            'actor': self.actor.state_dict(),
+            'critic': self.critic.state_dict(),
+            'actor_target': self.actor_target.state_dict(),
+            'critic_target': self.critic_target.state_dict(),
+            'actor_optimizer': self.actor_optimizer.state_dict(),
+            'critic_optimizer': self.critic_optimizer.state_dict(),
+            'replay_buffer': self.replay_buffer,
+        }, save_path)
+
+        # Clean up any garbage that's accrued
+        gc.collect()
+
+        return
 
     def train_model(self):
         """
@@ -428,8 +464,8 @@ class DDPG(Algorithm):
         self.actor_optimizer.step()
 
         # Update the target networks
-        soft_update(self.actor_target, self.actor, tau=self.tau)
-        soft_update(self.critic_target, self.critic, tau=self.tau)
+        soft_update(target=self.actor_target, source=self.actor, tau=self.tau)
+        soft_update(target=self.critic_target, source=self.critic, tau=self.tau)
 
         # new_params = list(self.actor_nn.parameters())[0].clone()
         # print(torch.equal(new_params.data, self.old_params.data))
