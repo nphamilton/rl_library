@@ -14,6 +14,7 @@ class ARSPolicy(object):
         """
         This method implements the linear policy described in the original paper and implementation.
         """
+
         # Initialize the variables accessible to the learning algorithm
         self.theta = np.zeros([num_actions, num_observations], dtype=float)
         self.n = 1.0
@@ -38,6 +39,7 @@ class ARSPolicy(object):
         :param weights: (np.ndarray)         Optional input for following a different set of weights
         :return action: (np.array  or int)   The desired action (will be an index if the action space is discrete
         """
+
         # Record state info if not evaluating
         if not self.is_evaluating:
             self.__push(state)
@@ -68,9 +70,7 @@ class ARSPolicy(object):
                                                 that are each the same size as the policy weights.
         """
 
-        # TODO: look into how using np.random.normal() instead effects results
-        noise_profiles = np.random.normal(0, 1, size=(num_profiles, self.theta.shape[0], self.theta.shape[1]))
-        # noise_profiles = np.random.randn(num_profiles, self.theta.shape[0], self.theta.shape[1])
+        noise_profiles = np.random.randn(num_profiles, self.theta.shape[0], self.theta.shape[1])
 
         return noise_profiles
 
@@ -81,6 +81,7 @@ class ARSPolicy(object):
         :param state:   (np.array) The input state
         :return:        (np.array) The normalized state
         """
+
         return (state - self.mu) / self.std
 
     def __push(self, state):
@@ -92,6 +93,7 @@ class ARSPolicy(object):
 
         :param state:   (np.array) The input state
         """
+
         self.buffer_n += 1.0
         if self.buffer_n == 1.0:
             self.buffer_mu = state
@@ -107,6 +109,7 @@ class ARSPolicy(object):
         """
         This method updates the mean and standard deviation for the next round evaluation or exploration
         """
+
         n1 = self.n
         n2 = self.buffer_n
         n = n1 + n2

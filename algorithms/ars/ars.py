@@ -2,10 +2,8 @@
 File:   ars.py
 Author: Nathaniel Hamilton
 
-Description:
-
-Usage:       This class implements the Augmented Random Search algorithm written about in
-             https://arxiv.org/abs/1803.07055
+Description:    This class implements the Augmented Random Search algorithm written about in
+                https://arxiv.org/abs/1803.07055
 
 """
 import time
@@ -104,6 +102,7 @@ class ARS(Algorithm):
         :return reward_sum: (float)      The total reward accumulated during the rollout
         :return step:       (int)        The number of steps executed during the rollout
         """
+
         # Initialize
         step = 0
         reward_sum = 0
@@ -302,9 +301,6 @@ class ARS(Algorithm):
             # Update the model
             self.update_model(rewards_pos, rewards_neg, noise)
 
-            # Update normalization parameters in the policy
-            # self.policy.update_norm()
-
             # Evaluate the model
             eval_count += 1
             if eval_count % self.eval_iter == 0:
@@ -336,7 +332,7 @@ class ARS(Algorithm):
                 t_eval_end = time.time()
                 evaluation_time += t_eval_end - t_eval_start
 
-            # # Update normalization parameters in the policy
+            # Update normalization parameters in the policy
             self.policy.update_norm()
 
         t_train = time.time()

@@ -19,8 +19,8 @@ if __name__ == '__main__':
                   exploration_noise=0.02, rollout_length=rollout_length, evaluation_length=-1,
                   evaluation_iter=1,
                   num_evaluations=1, random_seed=1964,
-                  log_path='/Users/nphamilton/rl_library/applications/gym_training/ars_log',
-                  save_path='/Users/nphamilton/rl_library/applications/gym_training/ars_models')
+                  log_path='/Users/nphamilton/rl_library/applications/gym_training/ars',
+                  save_path='/Users/nphamilton/rl_library/applications/gym_training/ars/models')
 
     final_policy_reward_sum, execution_time, training_time = learner.train_model()
     print('Final Evaluation Reward: ' + str(final_policy_reward_sum))
