@@ -250,7 +250,7 @@ class DDPG(Algorithm):
 
         return np_action
 
-    def load_model(self, load_path):
+    def load_model(self, load_path=None):
         """
         This function loads the neural network models and optimizers for both the actor and the critic from one file.
         If a load_path is not provided, the function will not execute. For more examples on how to save/load models,
@@ -283,7 +283,7 @@ class DDPG(Algorithm):
 
         return
 
-    def save_model(self, save_path):
+    def save_model(self, save_path='.'):
         """
         This method saves the neural network models and optimizers for both the actor and the critic in one file. For
         more examples on how to save/load models, visit
