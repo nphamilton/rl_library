@@ -13,7 +13,7 @@ from runners.abstract_runner import Runner
 
 
 class GymRunner(Runner):
-    def __init__(self, env_name='CartPole-v0', render=True):
+    def __init__(self, env_name='CartPole-v0', scale=1, render=True):
         """
         A runner works as an interface between the learning agent and the learning environment. Anything the agent wants to
         do in the environment should be run through a runner. Each environment should gets its own style of runner because
@@ -31,6 +31,7 @@ class GymRunner(Runner):
 
         # Save input parameters
         self.render = render
+        self.scale = scale
 
         # Create the gym environment
         self.env = gym.make(env_name)
@@ -46,6 +47,17 @@ class GymRunner(Runner):
             self.is_discrete = False
             self.action_shape = np.asarray(self.env.action_space.shape)
             # print(self.env.action_space.shape)
+
+        if self.is_discrete:
+            self.max_action = None
+            self.min_action = None
+            self.scale_mult = None
+            self.scale_add = None
+        else:
+            self.max_action = self.env.action_space.high
+            self.min_action = self.env.action_space.low
+            self.scale_mult = (self.max_action - self.min_action) / 2.0
+            self.scale_add = (self.max_action - self.min_action) / 2.0 + self.min_action
 
         self.state = np.zeros(self.obs_shape)
 
@@ -89,6 +101,15 @@ class GymRunner(Runner):
         """
         if render and self.render:
             self.env.render()
+
+        if not self.is_discrete:
+            if self.scale == 1:
+                # Scale the action
+                action = np.multiply(action, self.scale_mult) + self.scale_add
+            elif self.scale == 0:
+                action = np.minimum(np.maximum(action, self.min_action), self.max_action)
+            else:
+                raise NotImplementedError
 
         next_state, reward, done, info = self.env.step(action)
         exit_cond = 0

@@ -12,7 +12,7 @@ if __name__ == '__main__':
     environment_name = 'Pendulum-v0'  # 'MountainCarContinuous-v0'  # 'CartPole-v1'
 
     # Create the runner
-    runner = GymRunner(env_name=environment_name, render=True)
+    runner = GymRunner(env_name=environment_name, scale=0, render=True)
 
     # Create the learner
     learner = ARS(runner=runner, num_training_steps=1000000, step_size=0.02, dirs_per_iter=24, num_top_performers=8,

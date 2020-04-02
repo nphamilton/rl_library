@@ -25,7 +25,7 @@ class DDPG(Algorithm):
     def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000,
                  evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100,
                  actor_learning_rate=1e-4, critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001,
-                 noise_sigma=0.2, noise_theta=0.15, log_path='.', save_path='.', load_path=None):
+                 noise_sigma=0.2, noise_theta=0.15, log_path='.', save_path='.', load_path=None, render_eval=True):
         """
         This class implements the Deep Deterministic Policy Gradient algorithm written about in
         https://arxiv.org/abs/1509.02971
@@ -60,6 +60,7 @@ class DDPG(Algorithm):
         :param log_path:             (str)    File path to directory where episode_performance.csv will be saved.
         :param save_path:            (str)    File path to directory where all models will be saved.
         :param load_path:            (str)    File path to initial model to be loaded.
+        :param render_eval           (bool)   Boolean selection for rendering the environment during evaluation.
         """
 
         # Save all parameters
@@ -78,6 +79,7 @@ class DDPG(Algorithm):
         self.weight_decay = weight_decay
         self.gamma = gamma
         self.tau = tau
+        self.render = render_eval
 
         # Initialize Cuda variables
         use_cuda = torch.cuda.is_available()
@@ -131,6 +133,7 @@ class DDPG(Algorithm):
         self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(runner.action_shape),
                                                   sigma=(noise_sigma * np.ones(runner.action_shape)),
                                                   theta=noise_theta, dt=time_per_step)
+        # self.old_params = list(self.actor.parameters())[0].clone()
 
     def evaluate_model(self, evaluation_length=-1):
         """
@@ -169,7 +172,7 @@ class DDPG(Algorithm):
             action = self.get_action(state)  # No noise injected during evaluation
 
             # Execute determined action
-            next_state, reward, done, exit_cond = self.runner.step(action, render=True)
+            next_state, reward, done, exit_cond = self.runner.step(action, render=self.render)
 
             # Update for next step
             reward_sum += reward
@@ -467,7 +470,7 @@ class DDPG(Algorithm):
         soft_update(target=self.actor_target, source=self.actor, tau=self.tau)
         soft_update(target=self.critic_target, source=self.critic, tau=self.tau)
 
-        # new_params = list(self.actor_nn.parameters())[0].clone()
+        # new_params = list(self.actor.parameters())[0].clone()
         # print(torch.equal(new_params.data, self.old_params.data))
         #
         # self.old_params = new_params

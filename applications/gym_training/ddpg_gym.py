@@ -11,7 +11,7 @@ if __name__ == '__main__':
     environment_name = 'Pendulum-v0'  # 'MountainCarContinuous-v0'  # 'Pendulum-v0'
 
     # Create the runner
-    runner = GymRunner(env_name=environment_name, render=True)
+    runner = GymRunner(env_name=environment_name, scale=1, render=True)
 
     # Create the learner
     learner = DDPG(runner=runner, num_training_steps=100000, time_per_step=1., rollout_length=rollout_length,

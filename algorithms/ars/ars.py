@@ -19,7 +19,7 @@ from algorithms.ars.core import *
 class ARS(Algorithm):
     def __init__(self, runner, num_training_steps, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                  exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
-                 num_evaluations=5, random_seed=8, log_path='.', save_path='.', load_path=None):
+                 num_evaluations=5, random_seed=8, log_path='.', save_path='.', load_path=None, render_eval=True):
         """
         This class implements the Augmented Random Search algorithm written about in https://arxiv.org/abs/1803.07055
         The default values provided in this class are a blend between the ones used in the authors implementation
@@ -54,6 +54,7 @@ class ARS(Algorithm):
         :param save_path:           (str)   File path to directory where all saved models will be stored. Default='.'
         :param load_path:           (str)   File path to a previously saved model to load from. Default=None indicating
                                                 no model to  load from.
+        :param render_eval           (bool)   Boolean selection for rendering the environment during evaluation.
         """
 
         # Make sure the input parameters are valid
@@ -72,6 +73,7 @@ class ARS(Algorithm):
         self.num_evals = num_evaluations
         self.num_training_steps = num_training_steps
         self.save_path = save_path
+        self.render = render_eval
 
         # Set the random seed
         np.random.seed(random_seed)
@@ -172,7 +174,7 @@ class ARS(Algorithm):
             action = self.policy.get_action(state)
 
             # Execute determined action
-            next_state, reward, done, exit_cond = self.runner.step(action, render=True)
+            next_state, reward, done, exit_cond = self.runner.step(action, render=self.render)
 
             # Update for next step
             reward_sum += reward

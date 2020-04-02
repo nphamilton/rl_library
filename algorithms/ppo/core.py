@@ -9,6 +9,7 @@ Description: This class implements the associated classes for the Proximal Polic
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 import torch.nn.functional as F
 
 
@@ -25,16 +26,16 @@ def calculate_log_probability(x, mu, std_devs):
     :return log_prob:   (float)
     """
     # Make sure nothing is attached
-    mu = mu.detach()
-    std_devs = std_devs.detach()
+    # mu = mu.detach()
+    # std_devs = std_devs.detach()
 
     # Compute first term
     logstds = torch.log(std_devs)
-    a = 2 * torch.sum(logstds).numpy()
+    a = 2 * torch.sum(logstds)
 
     # Compute second term
-    x = torch.FloatTensor(x)
-    b = torch.sum(torch.pow(((x - mu) / std_devs), 2)).numpy()
+    # x = torch.FloatTensor(x)
+    b = torch.sum(torch.pow(((x - mu) / std_devs), 2))
 
     # Compute third term
     c = np.log(2*np.pi)
@@ -43,6 +44,37 @@ def calculate_log_probability(x, mu, std_devs):
     log_prob = -0.5 * (a + b + c)
 
     return log_prob
+
+
+def compute_gae(next_value, rewards, values, dones, gamma, lam):
+    """
+    This function computes the returns after an episode has been completed. returns are the estimated state-action
+    value, i.e. Q-value
+
+    :input:
+        :param next_value:  (float)     The estimated value of the next state from the critic.
+        :param rewards:     (list)      The rewards collected during the episode.
+        :param values:      (list)      The estimated values during the episode from the critic.
+        :param dones:       (list)
+        :param gamma:       (float)
+        :param lam:         (float)
+    :output:
+        :return returns:    (ndarray)   The computed returns for the episode.
+    """
+
+    future_val = next_value
+    gae = 0
+    returns = np.zeros_like(values)
+    for t in reversed(range(len(rewards))):
+        delta = rewards[t] + (gamma * future_val * (1 - dones[t])) - values[t]
+        gae = delta + gamma * lam * (1 - dones[t]) * gae
+        future_val = values[t]
+        returns[t] = gae + values[t]
+
+    adv = returns - np.asarray(values)
+    advantages = (adv - np.mean(adv)) / (np.std(adv) + 1e-10)
+
+    return returns, advantages
 
 
 def init_weights(m):
@@ -116,7 +148,7 @@ class ContinuousActor(nn.Module):
         """
 
         # Pass through layer 1
-        x = self.linear1(state)
+        x = self.linear1(state)  # Variable(state, requires_grad=True))
         x = torch.tanh(x)
 
         # Pass through layer 2
@@ -135,7 +167,81 @@ class ContinuousActor(nn.Module):
         # Return the result
         return mu, self.std, logp_a  # TODO modify if necessary to make discrete option match
 
-# TODO discrete actor
+
+########################################################################################################################
+class DiscreteActor(nn.Module):
+    def __init__(self, num_inputs=4, hidden_size1=64, hidden_size2=64, num_actions=2):
+        super(DiscreteActor, self).__init__()
+        """
+        This Neural Network architecture creates an actor, which provides the control output. The architecture is 
+        derived from the original PPO paper.
+
+        :param num_inputs:  (int)   The desired size of the input layer. Should be the same size as the number of 
+                                        inputs to the NN. Default=4
+        :param hidden_size1:(int)   The desired size of the first hidden layer. Default=400
+        :param hidden_size2:(int)   The desired size of the second hidden layer. Default=300
+        :param num_actions: (int)   The desired size of the output layer. Should be the same size as the number of 
+                                        outputs from the NN. Default=2
+        """
+
+        # The first layer
+        self.linear1 = nn.Linear(num_inputs, hidden_size1)
+
+        # The second layer
+        self.linear2 = nn.Linear(hidden_size1, hidden_size2)
+
+        # The output layer
+        self.out = nn.Linear(hidden_size2, num_actions)
+
+        # Initialize according to method described in PPO paper
+        self.initialize_orthogonal()
+
+    def initialize_orthogonal(self):
+        """
+        This function initializes the weights of the network according to the method described in "Exact solutions to
+        the nonlinear dynamics of learning in deep linear neural networks" - Saxe, A. et al. (2013)
+        """
+
+        # Initialize linear1
+        self.linear1.apply(init_weights)
+
+        # Initialize linear2
+        self.linear2.apply(init_weights)
+
+        # Initialize output layer
+        self.out.apply(init_weights)
+
+        return
+
+    def forward(self, state, action=None):
+        """
+        This function performs a forward pass through the network.
+
+        :param state:  (tensor)   The input state the NN uses to compute an output.
+        :param action: (np.array) ???
+        :return mu:    (tensor)   The output of the NN, which is the action to be taken.
+        """
+
+        # Pass through layer 1
+        x = self.linear1(state)  # Variable(state, requires_grad=True))
+        x = torch.tanh(x)
+
+        # Pass through layer 2
+        x = self.linear2(x)
+        x = torch.tanh(x)
+
+        # Pass through the output layer
+        x = self.out(x)
+        x = F.relu(x)
+        pi = F.softmax(x)
+
+        # Compute the log probability of taking the input action
+        logp_a = None
+        if action is not None:
+            logp_a = torch.log(pi.squeeze(0)[action])
+
+        # Return the result
+        return pi, logp_a  # TODO modify if necessary to make discrete option match
 
 
 ########################################################################################################################
@@ -193,7 +299,7 @@ class PPOCritic(nn.Module):
         """
 
         # Pass through layer 1
-        x = self.linear1(state)
+        x = self.linear1(state)  #Variable(state, requires_grad=True))
         x = torch.tanh(x)
 
         # Pass through layer 2
