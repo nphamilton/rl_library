@@ -444,15 +444,14 @@ class PPO(Algorithm):
 
         # Calculate new values and log probabilities
         states = Variable(torch.FloatTensor(states).to(self.device), requires_grad=True)
-        actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
-        # print(len(actions))
         new_log_probs = []
-        # print(new_log_probs)
         if self.is_discrete:
+            # actions = Variable(torch.LongTensor(actions).to(self.device), requires_grad=True)
             for i in range(len(actions)):
                 _, log_prob = self.actor.forward(states[i], actions[i])
                 new_log_probs.append(log_prob)
         else:
+            actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
             for i in range(len(actions)):
                 _, _, log_prob = self.actor.forward(states[i], actions[i])
                 new_log_probs.append(log_prob)
@@ -461,7 +460,7 @@ class PPO(Algorithm):
         # print(new_log_probs)
 
         # Convert arrays into tensors and send them to the GPU to speed up calculations
-        old_values = Variable(torch.FloatTensor(old_values).to(self.device))
+        old_values = torch.FloatTensor(old_values).detach().to(self.device)
         new_values = new_values.to(self.device)
         returns = torch.FloatTensor(returns).detach().to(self.device)
         old_log_probs = torch.FloatTensor(old_log_probs).detach().to(self.device)

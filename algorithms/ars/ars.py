@@ -8,7 +8,6 @@ Description:    This class implements the Augmented Random Search algorithm writ
 """
 import time
 import gc
-import math
 import os
 import numpy as np
 import torch
