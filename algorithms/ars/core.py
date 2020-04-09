@@ -35,7 +35,7 @@ class ARSPolicy(object):
         not evaluating, this method records the state information in the form of a running average and standard
         deviation.
 
-        :param state:   (np.array)           The input state
+        :param state:   (np.array)           The input state as a 1-D array
         :param weights: (np.ndarray)         Optional input for following a different set of weights
         :return action: (np.array  or int)   The desired action (will be an index if the action space is discrete
         """
@@ -49,11 +49,13 @@ class ARSPolicy(object):
 
         # Determine the action
         if weights is None:
-            action = self.theta.dot(state)
+            # print(f'core.theta: {self.theta}')
+            # print(f'core.state: {state}')
+            action = self.theta.dot(state.T)
         else:
             assert weights.shape == self.theta.shape, \
                 ("weights.shape = {}, theta.shape = {}".format(weights.shape, self.theta.shape))
-            action = weights.dot(state)
+            action = weights.dot(state.T)
 
         # Return the index of the maximum value from the action if the action space is discrete
         if self.is_discrete:
@@ -81,7 +83,6 @@ class ARSPolicy(object):
         :param state:   (np.array) The input state
         :return:        (np.array) The normalized state
         """
-
         return (state - self.mu) / self.std
 
     def __push(self, state):
