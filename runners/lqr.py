@@ -78,7 +78,7 @@ class LQRRunner(Runner):
         exit will be provided, just the state.
 
         """
-        return np.asarray(self.state.T)
+        return self.state.A1
 
     def is_available(self):
         """
@@ -134,7 +134,8 @@ class LQRRunner(Runner):
             exit_cond = 1
 
         # Convert values to outputs
-        next_state = np.asarray(x_next.T)
+        next_state = x_next.A1
+        # print(f'next_state: {next_state}')
         reward = -1 * float(cost)
 
         return next_state, reward, done, exit_cond
