@@ -441,6 +441,7 @@ class DDPG(Algorithm):
         batch_next_states = torch.FloatTensor(next_states).to(self.device)
 
         # Compute the critics estimated Q values
+        # print(batch_actions)
         batch_qs = self.critic.forward(batch_states, batch_actions)
 
         # Compute what the actions would have been without noise

@@ -135,13 +135,13 @@ class DDPGActor(nn.Module):
 
         # Pass through layer 1
         x = self.linear1(state)
-        x = self.ln1(x)
         x = F.relu(x)
+        x = self.ln1(x)
 
         # Pass through layer 2
         x = self.linear2(x)
-        x = self.ln2(x)
         x = F.relu(x)
+        x = self.ln2(x)
 
         # Pass through the output layer
         x = self.out(x)
@@ -218,16 +218,16 @@ class DDPGCritic(nn.Module):
 
         # Pass through layer 1
         x = self.linear1(state)
-        x = self.ln1(x)
         x = F.relu(x)
+        x = self.ln1(x)
 
         # Concatenate the first layer output with the action
         x = torch.cat((x, action), 1)
 
         # Pass through layer 2
         x = self.linear2(x)
-        x = self.ln2(x)
         x = F.relu(x)
+        x = self.ln2(x)
 
         # Pass through the output layer
         q = self.out(x)
