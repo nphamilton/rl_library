@@ -91,15 +91,15 @@ class DDPG(Algorithm):
         torch.cuda.manual_seed_all(random_seed)
 
         # Create the actor and critic neural network
-        self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+        self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
-        self.critic = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+        self.critic = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                  num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
 
         # Create the target networks
-        self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+        self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                       num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
-        self.critic_target = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=400, hidden_size2=300,
+        self.critic_target = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                         num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
 
         # Create the optimizers for the actor and critic neural networks
