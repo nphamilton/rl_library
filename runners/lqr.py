@@ -123,20 +123,21 @@ class LQRRunner(Runner):
         # print(cost)
         self.time += 1
 
+        # Convert values to outputs
+        next_state = x_next.A1
+        # print(f'next_state: {next_state}')
+        reward = -1 * float(cost)
+
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
         if self.time >= self.horizon_length:
             done = 1
-        if np.any(np.less(x, self.min_state)) or np.any(np.less(self.max_state, x)):
+        if np.any(np.less(next_state, self.min_state)) or np.any(np.less(self.max_state, next_state)):
             # print(np.less(x, self.min_state))
             # print(np.less(self.max_state, x))
             exit_cond = 1
-
-        # Convert values to outputs
-        next_state = x_next.A1
-        # print(f'next_state: {next_state}')
-        reward = -1 * float(cost)
+            reward = -100.
 
         return next_state, reward, done, exit_cond
 
