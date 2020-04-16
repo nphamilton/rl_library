@@ -25,10 +25,10 @@ if __name__ == '__main__':
                        max_state=max_state, evaluation_init=None)
 
     # Create the learner
-    learner = ARS(runner=runner, num_training_steps=1000000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
+    learner = ARS(runner=runner, num_training_steps=100000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                   exploration_noise=0.02, rollout_length=lqr_horizon_length, evaluation_length=-1,
                   evaluation_iter=1,
-                  num_evaluations=1, random_seed=1964,
+                  num_evaluations=5, random_seed=1964,
                   log_path=path,
                   save_path=path + '/models')
 

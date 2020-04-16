@@ -9,16 +9,16 @@ from runners.gym_runner import *
 if __name__ == '__main__':
     # Declare all the variables
     rollout_length = 200
-    environment_name = 'CartPole-v1'  # 'MountainCarContinuous-v0'  # 'Pendulum-v0'
+    environment_name = 'Pendulum-v0'  # 'CartPole-v1'  # 'MountainCarContinuous-v0'  # 'Pendulum-v0'
 
     # Create the runner
-    runner = GymRunner(env_name=environment_name, scale=0, render=True)
+    runner = GymRunner(env_name=environment_name, scale=0, render=False)
 
     # Create the learner
-    learner = ARS(runner=runner, num_training_steps=1000000, step_size=0.02, dirs_per_iter=24, num_top_performers=8,
+    learner = ARS(runner=runner, num_training_steps=100000, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                   exploration_noise=0.02, rollout_length=rollout_length, evaluation_length=-1,
                   evaluation_iter=1,
-                  num_evaluations=1, random_seed=1964,
+                  num_evaluations=5, random_seed=8,
                   log_path='/Users/nphamilton/rl_library/applications/gym_training/ars',
                   save_path='/Users/nphamilton/rl_library/applications/gym_training/ars/models')
 
