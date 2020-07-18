@@ -14,6 +14,5 @@ setup(
         'matplotlib==3.1.3',
         'numpy~=1.18.1',
         'seaborn==0.10.0',
-        'pytorch==1.4.1',
     ],
 )

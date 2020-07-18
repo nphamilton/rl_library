@@ -3,10 +3,18 @@ TODO header
 """
 
 import numpy as np
+import argparse
+
 from algorithms.ddpg.ddpg import *
 from runners.lqr import *
 
 if __name__ == '__main__':
+    # Collect the random seed input from the command line
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--random_seed', '-rand', required=False, default=8, type=int, action='store',
+                        help='Set a random seed to have reproducible results.')
+    args = parser.parse_args()
+
     # Declare all the variables
     state_matrix = np.matrix([[0., 1., 0., 0.], [0., 0., 0.716, 0.], [0., 0., 0., 1.], [0., 0., 15.76, 0.]])
     input_matrix = np.matrix([[0.], [0.9755], [0.], [1.46]])
@@ -17,7 +25,7 @@ if __name__ == '__main__':
     max_action = np.array([15.])
     lqr_horizon_length = 200
     rollout_length = 1000
-    path = '/Users/nphamilton/rl_library/applications/mlv_project/cart_pole/ddpg'
+    path = f'./ddpg_{args.random_seed}'
 
     # Create the runner
     runner = LQRRunner(state_matrix=state_matrix, input_matrix=input_matrix, state_cost=state_cost,
@@ -27,13 +35,10 @@ if __name__ == '__main__':
 
     # Create the learner
     learner = DDPG(runner=runner, num_training_steps=100000, time_per_step=0.01, rollout_length=rollout_length,
-                   evaluation_length=-1, evaluation_iter=1,
-                   num_evaluations=5, random_seed=1964, replay_capacity=10000, batch_size=64, actor_learning_rate=1e-4,
-                   critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2,
-                   noise_theta=0.15,
-                   log_path=path,
-                   save_path=path + '/models',
-                   load_path=None)
+                   evaluation_length=-1, evaluation_iter=1, num_evaluations=5, random_seed=args.random_seed,
+                   replay_capacity=10000, batch_size=64, actor_learning_rate=1e-4, critic_learning_rate=1e-3,
+                   weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2, noise_theta=0.15, log_path=path,
+                   save_path=path + '/models', load_path=None)
 
     final_policy_reward_sum, execution_time, training_time = learner.train_model()
     print('Final Evaluation Reward: ' + str(final_policy_reward_sum))

@@ -1,9 +1,9 @@
 """
-File:   ddpg.py
+File:   sac.py
 Author: Nathaniel Hamilton
 
-Description:    This class implements the Deep Deterministic Policy Gradient algorithm written about in
-                https://arxiv.org/abs/1509.02971
+Description:    This class implements the Soft Actor-Critic algorithm written about in
+                https://arxiv.org/abs/1801.01290
 
 """
 
@@ -17,18 +17,16 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from algorithms.abstract_algorithm import Algorithm
 from utils.replay_buffer import *
-from utils.ornstein_uhlenbeck_noise import *
-from algorithms.ddpg.core import *
+from algorithms.sac.core import *
 
 
-class DDPG(Algorithm):
-    def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000,
-                 evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100,
-                 actor_learning_rate=1e-4, critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001,
-                 noise_sigma=0.2, noise_theta=0.15, log_path='.', save_path='.', load_path=None, render_eval=True):
+class SAC(Algorithm):
+    def __init__(self, runner, num_training_steps, rollout_length=1000, evaluation_length=-1,
+                 evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=1000000, batch_size=256,
+                 learning_rate=1e-4, alpha=0.2, gamma=0.99, tau=0.005, log_path='.',
+                 save_path='.', load_path=None, render_eval=True):
         """
-        This class implements the Deep Deterministic Policy Gradient algorithm written about in
-        https://arxiv.org/abs/1509.02971
+        This class implements the Soft Actor-Critic algorithm written about in https://arxiv.org/abs/1801.01290
 
         The input names are descriptive of variable's meaning, but within the class, the variable names from the paper
         are used.
@@ -50,13 +48,11 @@ class DDPG(Algorithm):
                                                 memories.
         :param batch_size:           (int)    Number of memories to sample for each update.
         TODO: NN architecture info
-        :param actor_learning_rate:  (float)  The learning rate for the Adam optimizer updating the actor.
-        :param critic_learning_rate: (float)  The learning rate for the Adam optimizer updating the critic.
-        :param weight_decay:         (float)  Weight decay for Adam optimizer updating the critic.
+        :param learning_rate:        (float)  The learning rate for the Adam optimizers.
+        :param alpha:                (float)  Entropy regularization coefficient. (Equivalent to inverse of reward
+                                                scale in the original SAC paper.)
         :param gamma:                (float)  Discount factor for computing returns.
         :param tau:                  (float)  Soft update factor.
-        :param noise_sigma:          (float)  Standard deviation of exploration noise.
-        :param noise_theta:          (float)  Theta parameter for Ornstein-Uhlenbeck exploration noise.
         :param log_path:             (str)    File path to directory where episode_performance.csv will be saved.
         :param save_path:            (str)    File path to directory where all models will be saved.
         :param load_path:            (str)    File path to initial model to be loaded.
@@ -74,9 +70,8 @@ class DDPG(Algorithm):
         self.save_path = save_path
         self.capacity = replay_capacity
         self.batch_size = batch_size
-        self.actor_lr = actor_learning_rate
-        self.critic_lr = critic_learning_rate
-        self.weight_decay = weight_decay
+        self.lr = learning_rate
+        self.alpha = alpha
         self.gamma = gamma
         self.tau = tau
         self.render = render_eval
@@ -91,27 +86,32 @@ class DDPG(Algorithm):
         torch.cuda.manual_seed_all(random_seed)
 
         # Create the actor and critic neural network
-        self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                               num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
-        self.critic = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                                 num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        self.actor = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                              num_actions=runner.action_shape[0]).to(self.device)
+        self.critic1 = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                 num_actions=runner.action_shape[0]).to(self.device)
+        self.critic2 = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                 num_actions=runner.action_shape[0]).to(self.device)
 
         # Create the target networks
-        self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                                      num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
-        self.critic_target = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                                        num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        self.actor_target = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                     num_actions=runner.action_shape[0]).to(self.device)
+        self.critic1_target = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                        num_actions=runner.action_shape[0]).to(self.device)
+        self.critic2_target = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                        num_actions=runner.action_shape[0]).to(self.device)
 
         # Create the optimizers for the actor and critic neural networks
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.actor_lr)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.critic_lr,
-                                           weight_decay=self.weight_decay)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.lr)
+        self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=self.lr)
+        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=self.lr)
 
         # Initialize the target NNs or load models
         if (load_path is None) or (load_path == 'None'):
             # Targets are copied with a hard update
             hard_update(target=self.actor_target, source=self.actor)
-            hard_update(target=self.critic_target, source=self.critic)
+            hard_update(target=self.critic1_target, source=self.critic1)
+            hard_update(target=self.critic2_target, source=self.critic2)
 
         else:
             self.load_model(load_path)
@@ -130,9 +130,6 @@ class DDPG(Algorithm):
 
         # Initialize variables used by the learner
         self.replay_buffer = ReplayBuffer(self.capacity)
-        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(runner.action_shape),
-                                                  sigma=(noise_sigma * np.ones(runner.action_shape)),
-                                                  theta=noise_theta, dt=time_per_step)
         # self.old_params = list(self.actor.parameters())[0].clone()
 
     def evaluate_model(self, evaluation_length=-1):
@@ -169,7 +166,7 @@ class DDPG(Algorithm):
                 break
 
             # Determine the next action
-            action = self.get_action(state)  # No noise injected during evaluation
+            action = self.get_action(state, deterministic=True)  # No noise injected during evaluation
 
             # Execute determined action
             next_state, reward, done, exit_cond = self.runner.step(action, render=self.render)
@@ -191,15 +188,14 @@ class DDPG(Algorithm):
         # Initialize variables
         steps_taken = 0
 
-        # Get the initial state information and reset the Ornstein-Uhlenbeck noise
-        self.noise.reset()
+        # Get the initial state information
         state = self.runner.get_state()
 
         # during exploration, update after every step
         while steps_taken < num_steps:
 
             # Determine the action to take
-            action = self.get_action(state, self.noise.noise())
+            action = self.get_action(state)
 
             # Take the action
             next_state, reward, done, exit_cond = self.runner.step(action)
@@ -217,7 +213,6 @@ class DDPG(Algorithm):
             # Only reset the environment if a terminal state has been reached
             if done == 1 or exit_cond == 1:
                 self.runner.reset()
-                self.noise.reset()
                 state = self.runner.get_state()
             else:
                 state = next_state
@@ -226,27 +221,22 @@ class DDPG(Algorithm):
 
         return
 
-    def get_action(self, state, noise=None):
+    def get_action(self, state, deterministic=False):
         """
         This function calculates the desired output using the NN and the exploration noise.
 
+
         :input:
-            :param state:       (ndarray)   Input state to determine which action to take
-            :param noise:       (ndarray)   The exploration noise. Default=[0, 0] (no noise)
+            :param state:         (ndarray)   Input state to determine which action to take
+            :param deterministic: (bool)      Flag indicating whether or not the returned action should be
+                                                deterministic.
         :output:
-            :return action:     (ndarray)   The chosen action to take
+            :return np_action:    (ndarray)   The chosen action to take
         """
         # Forward pass the network
         state = torch.FloatTensor(state).to(self.device)
-        self.actor.eval()  # Must be in eval mode to execute a forward pass
-        action = self.actor.forward(state)
-        self.actor.train()  # Must be in train mode to record gradients
+        action, logp = self.actor.forward(state, deterministic=deterministic, with_logp=False)
         action = action.cpu()
-
-        # Add the process noise to the action
-        if noise is not None:
-            action = action + torch.FloatTensor(noise).cpu()
-        action = action.clamp(-1.0, 1.0)  # Make sure action cannot exceed limits
 
         # Convert to numpy array
         np_action = action.detach().numpy()
@@ -268,18 +258,23 @@ class DDPG(Algorithm):
 
             # Store the saved models
             self.actor.load_state_dict(checkpoint['actor'])
-            self.critic.load_state_dict(checkpoint['critic'])
+            self.critic1.load_state_dict(checkpoint['critic1'])
+            self.critic2.load_state_dict(checkpoint['critic2'])
             self.actor_target.load_state_dict(checkpoint['actor_target'])
-            self.critic_target.load_state_dict(checkpoint['critic_target'])
+            self.critic1_target.load_state_dict(checkpoint['critic1_target'])
+            self.critic2_target.load_state_dict(checkpoint['critic2_target'])
             self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer'])
-            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
+            self.critic1_optimizer.load_state_dict(checkpoint['critic1_optimizer'])
+            self.critic2_optimizer.load_state_dict(checkpoint['critic2_optimizer'])
             self.replay_buffer = ReplayBuffer(checkpoint['replay_buffer'])
 
             # Evaluate the neural networks to ensure the weights were properly loaded
             self.actor.eval()
-            self.critic.eval()
+            self.critic1.eval()
+            self.critic2.eval()
             self.actor_target.eval()
-            self.critic_target.eval()
+            self.critic1_target.eval()
+            self.critic2_target.eval()
 
         # Clean up any garbage that's accrued
         gc.collect()
@@ -299,11 +294,14 @@ class DDPG(Algorithm):
         # Save everything necessary to start up from this point
         torch.save({
             'actor': self.actor.state_dict(),
-            'critic': self.critic.state_dict(),
+            'critic1': self.critic1.state_dict(),
+            'critic2': self.critic2.state_dict(),
             'actor_target': self.actor_target.state_dict(),
-            'critic_target': self.critic_target.state_dict(),
+            'critic1_target': self.critic1_target.state_dict(),
+            'critic2_target': self.critic2_target.state_dict(),
             'actor_optimizer': self.actor_optimizer.state_dict(),
-            'critic_optimizer': self.critic_optimizer.state_dict(),
+            'critic1_optimizer': self.critic1_optimizer.state_dict(),
+            'critic2_optimizer': self.critic2_optimizer.state_dict(),
             'replay_buffer': self.replay_buffer,
         }, save_path)
 
@@ -442,34 +440,46 @@ class DDPG(Algorithm):
 
         # Compute the critics estimated Q values
         # print(batch_actions)
-        batch_qs = self.critic.forward(batch_states, batch_actions)
+        batch_q1 = self.critic1.forward(batch_states, batch_actions)
+        batch_q2 = self.critic2.forward(batch_states, batch_actions)
 
-        # Compute what the actions would have been without noise
-        actions_without_noise = self.actor.forward(batch_states)
+        with torch.no_grad():
+            # Compute what the next actions would be
+            batch_a2, batch_logp_a2 = self.actor.forward(batch_next_states, with_logp=True)
 
-        # Compute the target's next state and next Q-value estimates used for computing loss
-        target_next_action_batch = (self.actor_target.forward(batch_next_states)).detach()
-        target_next_q_batch = (self.critic_target.forward(batch_next_states, target_next_action_batch)).detach()
-
-        # Compute y (a metric for computing the critic loss)
-        y = (batch_rewards + ((1 - batch_dones) * (1 - batch_exits) * self.gamma * target_next_q_batch)).detach()
+            # Target Q-values of next state-action pair
+            q1_pi_targ = self.critic1_target.forward(batch_next_states, batch_a2)
+            q2_pi_targ = self.critic2_target.forward(batch_next_states, batch_a2)
+            q_pi_targ = torch.min(q1_pi_targ, q2_pi_targ)
+            backup = batch_rewards + \
+                     self.gamma * (1 - batch_dones) * (1 - batch_exits) * (q_pi_targ - self.alpha * batch_logp_a2)
 
         # Compute critic loss and update using the optimizer
-        critic_loss = F.mse_loss(y, batch_qs)
-        self.critic_optimizer.zero_grad()
+        loss_q1 = ((batch_q1 - backup) ** 2).mean()
+        loss_q2 = ((batch_q2 - backup) ** 2).mean()
+        critic_loss = loss_q1 + loss_q2
+        self.critic1_optimizer.zero_grad()
+        self.critic2_optimizer.zero_grad()
         critic_loss.backward()
-        self.critic_optimizer.step()
+        self.critic1_optimizer.step()
+        self.critic2_optimizer.step()
 
         # Compute the actor loss and update using the optimizer
-        actor_loss = -self.critic(batch_states, actions_without_noise)
-        actor_loss = actor_loss.mean()
+        pi, logp_pi = self.actor.forward(batch_states)
+        q1_pi = self.critic1.forward(batch_states, pi)
+        q2_pi = self.critic2.forward(batch_states, pi)
+        q_pi = torch.min(q1_pi, q2_pi)
+
+        # Entropy-regularized policy loss
+        actor_loss = (self.alpha * logp_pi - q_pi).mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
         # Update the target networks
         soft_update(target=self.actor_target, source=self.actor, tau=self.tau)
-        soft_update(target=self.critic_target, source=self.critic, tau=self.tau)
+        soft_update(target=self.critic1_target, source=self.critic1, tau=self.tau)
+        soft_update(target=self.critic2_target, source=self.critic2, tau=self.tau)
 
         # new_params = list(self.actor.parameters())[0].clone()
         # print(torch.equal(new_params.data, self.old_params.data))
