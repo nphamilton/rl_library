@@ -455,15 +455,15 @@ class DDPG(Algorithm):
         y = (batch_rewards + ((1 - batch_dones) * (1 - batch_exits) * self.gamma * target_next_q_batch)).detach()
 
         # Compute critic loss and update using the optimizer
-        critic_loss = F.mse_loss(y, batch_qs)
         self.critic_optimizer.zero_grad()
+        critic_loss = F.mse_loss(y, batch_qs)
         critic_loss.backward()
         self.critic_optimizer.step()
 
         # Compute the actor loss and update using the optimizer
+        self.actor_optimizer.zero_grad()
         actor_loss = -self.critic(batch_states, actions_without_noise)
         actor_loss = actor_loss.mean()
-        self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 

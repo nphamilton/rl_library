@@ -17,7 +17,7 @@ if __name__ == '__main__':
     learner = SAC(runner=runner, num_training_steps=100000, rollout_length=rollout_length,
                   evaluation_length=-1, evaluation_iter=1,
                   num_evaluations=1, random_seed=1964, replay_capacity=10000, batch_size=64, learning_rate=1e-4,
-                  alpha=0.2, gamma=0.99, tau=0.001,
+                  alpha=1.0, gamma=0.99, tau=0.005,
                   log_path='/Users/nphamilton/rl_library/applications/gym_training/sac',
                   save_path='/Users/nphamilton/rl_library/applications/gym_training/sac/models',
                   load_path=None)

@@ -11,6 +11,7 @@ import time
 import gc
 import os
 import numpy as np
+import itertools
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
@@ -103,11 +104,16 @@ class SAC(Algorithm):
 
         # Create the optimizers for the actor and critic neural networks
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.lr)
-        self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=self.lr)
-        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=self.lr)
+        q_params = itertools.chain(self.critic1.parameters(), self.critic2.parameters())
+        self.critic_optimizer = optim.Adam(q_params, lr=self.lr)
 
         # Initialize the target NNs or load models
         if (load_path is None) or (load_path == 'None'):
+            # Initialize the networks orthogonally to improve performance
+            self.actor.initialize_orthogonal()
+            self.critic1.initialize_orthogonal()
+            self.critic2.initialize_orthogonal()
+
             # Targets are copied with a hard update
             hard_update(target=self.actor_target, source=self.actor)
             hard_update(target=self.critic1_target, source=self.critic1)
@@ -167,6 +173,7 @@ class SAC(Algorithm):
 
             # Determine the next action
             action = self.get_action(state, deterministic=True)  # No noise injected during evaluation
+            print(action)
 
             # Execute determined action
             next_state, reward, done, exit_cond = self.runner.step(action, render=self.render)
@@ -264,8 +271,7 @@ class SAC(Algorithm):
             self.critic1_target.load_state_dict(checkpoint['critic1_target'])
             self.critic2_target.load_state_dict(checkpoint['critic2_target'])
             self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer'])
-            self.critic1_optimizer.load_state_dict(checkpoint['critic1_optimizer'])
-            self.critic2_optimizer.load_state_dict(checkpoint['critic2_optimizer'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
             self.replay_buffer = ReplayBuffer(checkpoint['replay_buffer'])
 
             # Evaluate the neural networks to ensure the weights were properly loaded
@@ -300,8 +306,7 @@ class SAC(Algorithm):
             'critic1_target': self.critic1_target.state_dict(),
             'critic2_target': self.critic2_target.state_dict(),
             'actor_optimizer': self.actor_optimizer.state_dict(),
-            'critic1_optimizer': self.critic1_optimizer.state_dict(),
-            'critic2_optimizer': self.critic2_optimizer.state_dict(),
+            'critic_optimizer': self.critic_optimizer.state_dict(),
             'replay_buffer': self.replay_buffer,
         }, save_path)
 
@@ -440,6 +445,7 @@ class SAC(Algorithm):
 
         # Compute the critics estimated Q values
         # print(batch_actions)
+        self.critic_optimizer.zero_grad()
         batch_q1 = self.critic1.forward(batch_states, batch_actions)
         batch_q2 = self.critic2.forward(batch_states, batch_actions)
 
@@ -458,13 +464,11 @@ class SAC(Algorithm):
         loss_q1 = ((batch_q1 - backup) ** 2).mean()
         loss_q2 = ((batch_q2 - backup) ** 2).mean()
         critic_loss = loss_q1 + loss_q2
-        self.critic1_optimizer.zero_grad()
-        self.critic2_optimizer.zero_grad()
         critic_loss.backward()
-        self.critic1_optimizer.step()
-        self.critic2_optimizer.step()
+        self.critic_optimizer.step()
 
         # Compute the actor loss and update using the optimizer
+        self.actor_optimizer.zero_grad()
         pi, logp_pi = self.actor.forward(batch_states)
         q1_pi = self.critic1.forward(batch_states, pi)
         q2_pi = self.critic2.forward(batch_states, pi)
@@ -472,7 +476,6 @@ class SAC(Algorithm):
 
         # Entropy-regularized policy loss
         actor_loss = (self.alpha * logp_pi - q_pi).mean()
-        self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
