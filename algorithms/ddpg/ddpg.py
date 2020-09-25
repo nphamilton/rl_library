@@ -24,6 +24,7 @@ from algorithms.ddpg.core import *
 class DDPG(Algorithm):
     def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000,
                  evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100,
+                 architecture='standard',
                  actor_learning_rate=1e-4, critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001,
                  noise_sigma=0.2, noise_theta=0.15, log_path='.', save_path='.', load_path=None, render_eval=True):
         """
@@ -90,15 +91,21 @@ class DDPG(Algorithm):
         torch.manual_seed(random_seed)
         torch.cuda.manual_seed_all(random_seed)
 
-        # Create the actor and critic neural network
-        self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                               num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        # Create the actor neural network and its target
+        if architecture == 'verivital':
+            self.actor = VerivitalActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                        num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+            self.actor_target = VerivitalActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                               num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+        else:
+            self.actor = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                   num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+            self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+                                          num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
+
+        # Create the critic neural network and its target
         self.critic = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                  num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
-
-        # Create the target networks
-        self.actor_target = DDPGActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
-                                      num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
         self.critic_target = DDPGCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                         num_actions=runner.action_shape[0], final_bias=3e-3).to(self.device)
 
