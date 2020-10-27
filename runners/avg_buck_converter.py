@@ -14,7 +14,8 @@ from runners.abstract_runner import Runner
 
 
 class AvgBuckConverter(Runner):
-    def __init__(self, capacitor_value=4.4e-6, inductor_value=5.0e-5, resistor_value=4.0, sample_time=0.00001,
+    def __init__(self, capacitor_value=4.4e-6, inductor_value=5.0e-5, load_range=[4.0, 8.0], load_avg=6.0,
+                 sample_time=0.00001,
                  switching_frequency=10e-3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
                  max_action=np.array([0.95]), min_action=np.array([0.05]),
                  max_state=np.array([1000., 1000.]), min_state=None, scale=1,
@@ -33,7 +34,7 @@ class AvgBuckConverter(Runner):
         # Convert the inputs
         C = capacitor_value
         self.L = inductor_value
-        R = resistor_value
+        R = load
         self.dt = sample_time
         self.Vs = source_voltage
         self.Vref = reference_voltage
@@ -116,7 +117,7 @@ class AvgBuckConverter(Runner):
         # Adjust the action
         if self.scale == 1:
             # Scale the action
-            action = np.multiply(action, self.scale_mult) + self.scale_add
+            action = np.multiply(action, self.scale_mult) + self.scale_add  # TODO: This might be wrong...
         elif self.scale == 0:
             action = np.minimum(np.maximum(action, self.min_action), self.max_action)
         else:
