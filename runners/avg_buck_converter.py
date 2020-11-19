@@ -14,7 +14,8 @@ from runners.abstract_runner import Runner
 
 
 class AvgBuckConverter(Runner):
-    def __init__(self, capacitor_value=4.4e-6, inductor_value=5.0e-5, load_range=[4.0, 8.0], load_avg=6.0,
+    def __init__(self, capacitor_value=4.4e-6, capacitor_tolerance=0.2, inductor_value=5.0e-5, inductor_tolerance=0.2,
+                load_avg=6.0, load_range=[4.0, 8.0],
                  sample_time=0.00001,
                  switching_frequency=10e-3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
                  max_action=np.array([0.95]), min_action=np.array([0.05]),
@@ -31,19 +32,17 @@ class AvgBuckConverter(Runner):
         :param horizon_length:
         :param evaluation_init:
         """
-        # Convert the inputs
-        C = capacitor_value
-        self.L = inductor_value
-        R = load
+        # Save the inputs
+        self.capacitor_nom = capacitor_value
+        self.capacitor_range = capacitor_value * np.asarray([(1 - capacitor_tolerance), (1 + capacitor_tolerance)])
+        self.inductor_nom = inductor_value
+        self.inductor_range = inductor_value * np.asarray([(1 - inductor_tolerance), (1 + inductor_tolerance)])
+        self.load_nom = load_avg
+        self.load_range = load_range
         self.dt = sample_time
         self.Vs = source_voltage
         self.Vref = reference_voltage
         self.Vdes = desired_voltage
-
-        # Save the parameters
-        self.A = np.array([[0.0, -1.0/self.L], [1.0/C, -1.0/(R*C)]])  # state x=[i,v]
-        # print(f'A = {self.A}')
-        self.max_time = 0.00001/(R*C)
         self.eval_init = evaluation_init
         self.scale = scale
 
@@ -73,6 +72,10 @@ class AvgBuckConverter(Runner):
         self.is_discrete = False
 
         # Initialize variables
+        self.C = capacitor_value
+        self.L = inductor_value
+        self.R = load_avg
+        self.max_time = 0.00001 / (self.R * self.C)
         self.state = np.zeros_like(self.max_state)
         self.scale_mult = (self.max_action - self.min_action) / 2.0
         self.scale_add = (self.max_action - self.min_action) / 2.0 + self.min_action
@@ -117,13 +120,16 @@ class AvgBuckConverter(Runner):
         # Adjust the action
         if self.scale == 1:
             # Scale the action
-            action = np.multiply(action, self.scale_mult) + self.scale_add  # TODO: This might be wrong...
+            action = np.multiply(action, self.scale_mult) + self.scale_add
         elif self.scale == 0:
             action = np.minimum(np.maximum(action, self.min_action), self.max_action)
         else:
             raise NotImplementedError
 
         # Compute the next state
+        R = self.R  # TODO: add randomness to the load that changes at each step
+        A = np.array([[0.0, -1.0 / self.L], [1.0 / self.C, -1.0 / (R * self.C)]])  # state x=[i,v]
+        # print(f'A = {A}')
         x_next = copy.copy(x)
         time_range = np.arange(0, self.dt, 0.0000001)
         start_time = self.time
@@ -131,7 +137,7 @@ class AvgBuckConverter(Runner):
             Vref = self.Vref  # + self.amp*np.sin(self.freq*(start_time + i))
             D = Vref / self.Vs
             B = D * np.asarray([self.Vs / self.L, 0.0])
-            dx = np.dot(self.A, x_next) + np.multiply(B, action)
+            dx = np.dot(A, x_next) + np.multiply(B, action)
             # print(dx*self.dt)
             x_next = x_next + dx*0.0000001
         # print(f'next = {x_next}')
@@ -180,10 +186,16 @@ class AvgBuckConverter(Runner):
         """
 
         if evaluate and (self.eval_init is not None):
+            self.C = self.capacitor_nom
+            self.L = self.inductor_nom
+            self.R = self.load_nom
             self.state = self.eval_init
             self.time = 0
             self.stable_count = 0
         else:
+            self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
+            self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
+            self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
             self.state = np.asarray(
                 [np.random.uniform(self.min_init[i], self.max_init[i]) for i in range(len(self.state))])
             self.time = 0

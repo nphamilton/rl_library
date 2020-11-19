@@ -14,7 +14,7 @@ if __name__ == '__main__':
     rollout_length = 200
 
     # Create the runner
-    runner = AvgBuckConverter(capacitor_value=4.4e-6, inductor_value=5.0e-5, resistor_value=4.0,
+    runner = AvgBuckConverter(capacitor_value=4.4e-6, inductor_value=5.0e-5, load_avg=4.0, load_range=[2.0, 6.0],
                               sample_time=sample_time, source_voltage=10.0, reference_voltage=6.0, desired_voltage=6.0,
                               max_action=np.array([1.]), min_action=np.array([0.]),
                               max_state=np.array([20., 1000.]), min_state=np.array([0., 0.]), scale=1,
