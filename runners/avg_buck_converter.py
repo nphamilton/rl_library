@@ -15,9 +15,9 @@ from runners.abstract_runner import Runner
 
 class AvgBuckConverter(Runner):
     def __init__(self, capacitor_value=4.4e-6, capacitor_tolerance=0.2, inductor_value=5.0e-5, inductor_tolerance=0.2,
-                load_avg=6.0, load_range=[4.0, 8.0],
+                 load_avg=6.0, load_range=[4.0, 8.0],
                  sample_time=0.00001,
-                 switching_frequency=10e-3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
+                 switching_frequency=10e3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
                  max_action=np.array([0.95]), min_action=np.array([0.05]),
                  max_state=np.array([1000., 1000.]), min_state=None, scale=1,
                  max_init_state=np.array([3., 3.]), min_init_state=None,
@@ -90,7 +90,7 @@ class AvgBuckConverter(Runner):
         """
         i = self.state[0]
         v = self.state[1]
-        observation = np.asarray([(self.Vref-v), self.Vref, v, i])
+        observation = np.asarray([(self.Vref - v), self.Vref, v, i])
         return observation
 
     def is_available(self):
@@ -139,7 +139,7 @@ class AvgBuckConverter(Runner):
             B = D * np.asarray([self.Vs / self.L, 0.0])
             dx = np.dot(A, x_next) + np.multiply(B, action)
             # print(dx*self.dt)
-            x_next = x_next + dx*0.0000001
+            x_next = x_next + dx * 0.0000001
         # print(f'next = {x_next}')
 
         # Store and convert values
@@ -149,7 +149,7 @@ class AvgBuckConverter(Runner):
 
         # Compute the reward
         # reward = -1 * next_obs[0]**2  # -(Vref - v)^2
-        reward = -1 * (self.Vdes - next_obs[2])**2  # -(Vdes - Vout)^2
+        reward = -1 * (self.Vdes - next_obs[2]) ** 2  # -(Vdes - Vout)^2
 
         # Determine if the state is terminal
         done = 0
