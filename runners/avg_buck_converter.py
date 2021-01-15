@@ -75,7 +75,7 @@ class AvgBuckConverter(Runner):
         self.C = capacitor_value
         self.L = inductor_value
         self.R = load_avg
-        self.max_time = 0.00001 / (self.R * self.C)
+        self.max_time = 1. / (self.R * self.C)
         self.state = np.zeros_like(self.max_state)
         self.scale_mult = (self.max_action - self.min_action) / 2.0
         self.scale_add = (self.max_action - self.min_action) / 2.0 + self.min_action
@@ -154,17 +154,18 @@ class AvgBuckConverter(Runner):
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
-        if np.sum(x - x_next) == 0.0:
+        if np.sum(x - x_next) == 0.0 and abs(next_obs[2] - self.Vdes) <= 0.1:
             self.stable_count += 1
         else:
             self.stable_count = 0
         if self.stable_count >= 10:
             done = 1
         if self.time >= self.max_time:
+            print('time exceeded: ' + str(self.time) + ' of ' + str(self.max_time))
             exit_cond = 1
         if np.any(np.less(x_next, self.min_state)) or np.any(np.less(self.max_state, x_next)):
-            # print(np.less(x, self.min_state))
-            # print(np.less(self.max_state, x))
+            print(np.less(x, self.min_state))
+            print(np.less(self.max_state, x))
             exit_cond = 1
             reward = -100.
 

@@ -49,7 +49,7 @@ class HybridBuckConverter(Runner):
         # Save the parameters
         self.A = np.array([[0.0, -1.0 / self.L], [1.0 / self.C, -1.0 / (self.R * self.C)]])  # state x=[i,v]
         # print(f'A = {self.A}')
-        self.max_time = 0.00001 / (self.R * self.C)
+        self.max_time = 0.1 / (self.R * self.C)
         self.sim_dt = 0.0000001
         self.eval_init = evaluation_init
         self.scale = scale
@@ -104,9 +104,9 @@ class HybridBuckConverter(Runner):
         self.sawtooth_period = 1. / self.switch_freq
         sawtooth_t = np.arange(0., 1., self.sim_dt / self.sawtooth_period)
         self.sawtooth = signal.sawtooth(2 * np.pi * sawtooth_t)
-        print(self.sawtooth)
+        # print(self.sawtooth)
         self.sawtooth_len = len(self.sawtooth)
-        print(self.sawtooth_len)
+        # print(self.sawtooth_len)
         self.last_sawtooth_val = 0.0
         self.mode = 0
 
@@ -307,8 +307,9 @@ class HybridBuckConverter(Runner):
         if self.time >= self.max_time:
             exit_cond = 1
         if np.any(np.less(x_next, self.min_state)) or np.any(np.less(self.max_state, x_next)):
-            # print(np.less(x, self.min_state))
-            # print(np.less(self.max_state, x))
+            print(f'observed state is below the min: {np.less(x_next, self.min_state)}')
+            print(f'observed state is above the max: {np.less(self.max_state, x_next)}')
+            print(f'state: {x}')
             exit_cond = 1
             reward = -100.
 
