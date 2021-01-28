@@ -6,30 +6,44 @@ import matplotlib.pyplot as plt
 from scipy.io import savemat
 from algorithms.ddpg.ddpg import *
 from runners.avg_buck_converter import *
+from runners.hybrid_buck_converter import *
 
 if __name__ == '__main__':
     # Declare all the variables
     path = '/Users/nphamilton/rl_library/applications/buck_converter/ddpg'
-    sample_time = 0.00001
-    rollout_length = 200
+    sample_time = 0.001
+    rollout_length = 2000
 
     # Create the runner
-    runner = AvgBuckConverter(capacitor_value=4.4e-6, inductor_value=5.0e-5, resistor_value=4.0,
-                              sample_time=sample_time, source_voltage=10.0, reference_voltage=6.0, desired_voltage=6.0,
-                              max_action=np.array([1.]), min_action=np.array([0.]),
-                              max_state=np.array([20., 1000.]), min_state=np.array([0., 0.]), scale=1,
-                              max_init_state=np.array([3., 3.]), min_init_state=np.array([0., 0.]),
-                              evaluation_init=np.array([0., 0.]))
+    # runner = AvgBuckConverter(capacitor_value=2.2e-3, capacitor_tolerance=0.05, inductor_value=2.65e-3,
+    #                           inductor_tolerance=0.05, load_range=[9.5, 10.5], load_avg=10.0,
+    #                           sample_time=sample_time,
+    #                           switching_frequency=1e4, source_voltage=80.0, reference_voltage=48.0,
+    #                           desired_voltage=48.0,
+    #                           max_action=np.array([1.]), min_action=np.array([0.]),
+    #                           max_state=np.array([1000., 1000.]), min_state=np.array([-100., -100.]), scale=1,
+    #                           max_init_state=np.array([3., 48.]), min_init_state=np.array([0., 0.]),
+    #                           evaluation_init=np.array([0., 0.]))
+
+    runner = HybridBuckConverter(capacitor_value=2.2e-3, capacitor_tolerance=0.05, inductor_value=2.65e-3,
+                                 inductor_tolerance=0.05, load_range=[9.5, 10.5], load_avg=10.0,
+                                 sample_time=sample_time,
+                                 switching_frequency=1e4, source_voltage=80.0, reference_voltage=48.0,
+                                 desired_voltage=48.0,
+                                 max_action=np.array([1.]), min_action=np.array([0.]),
+                                 max_state=np.array([1000., 1000.]), min_state=np.array([-10., -10.]), scale=1,
+                                 max_init_state=np.array([3., 48.]), min_init_state=np.array([0., 0.]),
+                                 evaluation_init=np.array([0., 0.]))
 
     # Create the learner
-    learner = DDPG(runner=runner, num_training_steps=6000, time_per_step=sample_time, rollout_length=rollout_length,
+    learner = DDPG(runner=runner, num_training_steps=60000, time_per_step=sample_time, rollout_length=rollout_length,
                    evaluation_length=-1, evaluation_iter=1,
-                   num_evaluations=1, random_seed=1964, replay_capacity=10000, batch_size=64,
+                   num_evaluations=1, random_seed=1964, replay_capacity=1000000, batch_size=64,
                    architecture='verivital', actor_learning_rate=1e-4,
                    critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2,
                    noise_theta=0.15,
                    log_path=path,
-                   save_path=path+'/models',
+                   save_path=path + '/models',
                    load_path=None)
 
     learner.train_model()
@@ -42,7 +56,7 @@ if __name__ == '__main__':
               learner.actor.state_dict()['linear2.bias'].numpy(),
               learner.actor.state_dict()['out.bias'].numpy()]
 
-    savemat(path+'/final_model.mat', mdict={'W': weights, 'b': biases})
+    savemat(path + '/final_model.mat', mdict={'W': weights, 'b': biases})
 
     """ Plot an evaluation """
     step = 0
