@@ -15,13 +15,13 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
-from algorithms.abstract_algorithm import Algorithm
+# from algorithms.abstract_algorithm import Algorithm
 from utils.replay_buffer import *
 from utils.ornstein_uhlenbeck_noise import *
 from algorithms.ddpg.core import *
 
 
-class DDPG(Algorithm):
+class DDPG():
     def __init__(self, runner, num_training_steps, time_per_step, rollout_length=1000, evaluation_length=1000,
                  evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=500, batch_size=100,
                  architecture='standard',
@@ -253,6 +253,7 @@ class DDPG(Algorithm):
         # Add the process noise to the action
         if noise is not None:
             action = action + torch.FloatTensor(noise).cpu()
+            # print(action)
         action = action.clamp(-1.0, 1.0)  # Make sure action cannot exceed limits
 
         # Convert to numpy array

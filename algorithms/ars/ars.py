@@ -10,12 +10,13 @@ import time
 import gc
 import os
 import numpy as np
+import copy
 import torch
-from algorithms.abstract_algorithm import Algorithm
+# from algorithms.abstract_algorithm import Algorithm
 from algorithms.ars.core import *
 
 
-class ARS(Algorithm):
+class ARS():
     def __init__(self, runner, num_training_steps, step_size=0.02, dirs_per_iter=16, num_top_performers=16,
                  exploration_noise=0.03, rollout_length=1000, evaluation_length=1000, evaluation_iter=10,
                  num_evaluations=5, random_seed=8, log_path='.', save_path='.', load_path=None, render_eval=True):
@@ -94,6 +95,9 @@ class ARS(Algorithm):
         # Make sure the save path exists
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
+        
+        # Initialize useful variables
+        self.eval_avg = 0.0
 
     def __do_rollout(self, weights):
         """
@@ -110,7 +114,7 @@ class ARS(Algorithm):
         self.policy.is_evaluating = False
 
         # Start the evaluation from a safe starting point
-        self.runner.reset()
+        self.runner.reset(evaluate=True)
         state = self.runner.get_state()
         done = 0
         exit_cond = 0
@@ -130,7 +134,7 @@ class ARS(Algorithm):
 
             # Update for next step
             reward_sum += reward
-            state = next_state
+            state = copy.copy(next_state)
             step += 1
 
         return reward_sum, step
@@ -250,6 +254,7 @@ class ARS(Algorithm):
         log_time = t_eval_start - t_start - evaluation_time
         avg_steps = 0.0
         avg_reward = 0.0
+        print('Evaluating...')
         for j in range(self.num_evals):
             reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
@@ -264,6 +269,7 @@ class ARS(Algorithm):
         # Print the average results for the user to debugging
         print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps / self.num_evals) +
               ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
+        self.eval_avg = avg_reward / self.num_evals
 
         # Save the model that achieved this performance
         print('saving...')
@@ -288,9 +294,11 @@ class ARS(Algorithm):
             for i in range(self.N):
                 # Positive rollout
                 r_pos, steps_pos = self.__do_rollout(self.policy.theta + (self.nu * noise[i]))
+                print(r_pos)
 
                 # Negative rollout
                 r_neg, steps_neg = self.__do_rollout(self.policy.theta - (self.nu * noise[i]))
+                print(r_neg)
 
                 # Record rewards
                 rewards_pos[i] = r_pos
@@ -309,6 +317,7 @@ class ARS(Algorithm):
                 log_time = t_eval_start - t_start - evaluation_time
                 avg_steps = 0.0
                 avg_reward = 0.0
+                print('Evaluating...')
                 for j in range(self.num_evals):
                     reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
@@ -323,6 +332,7 @@ class ARS(Algorithm):
                 # Print the average results for the user to debugging
                 print('Training Steps: ' + str(step) + ', Avg Steps in Episode: ' + str(avg_steps / self.num_evals) +
                       ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
+                self.eval_avg = avg_reward / self.num_evals
 
                 # Save the model that achieved this performance
                 print('saving...')
@@ -334,7 +344,7 @@ class ARS(Algorithm):
                 evaluation_time += t_eval_end - t_eval_start
 
             # Update normalization parameters in the policy
-            self.policy.update_norm()
+            # self.policy.update_norm()
 
         t_train = time.time()
         training_time = t_train - t_start - evaluation_time
@@ -369,10 +379,18 @@ class ARS(Algorithm):
         # print(max_r)
         indexes = np.argsort(max_r)  # Indexes are arranged from smallest to largest
 
+        count_better = 100  # len(np.where(max_r >= self.eval_avg)[0])
+        # print(count_better)
+        b = min(self.b, count_better)
+        # print('b: ' + str(b) + 'count_better: ' + str(count_better))
+
+        if b <= 0: # If there was no improvement recorded in the training run, don't update
+            return
+
         sum_augs = np.zeros_like(self.policy.theta)
         l = len(indexes) - 1
         r_2b = []
-        for i in range(self.b):
+        for i in range(b):
             k = indexes[l - i]
             sum_augs += (rewards_pos[k] - rewards_neg[k]) * noise[k]
             r_2b.append(rewards_pos[k])  # - rewards_neg[k])
@@ -388,7 +406,7 @@ class ARS(Algorithm):
         # print((self.alpha / (self.b * sigma_r)) * sum_augs)
 
         # Compute the new policy weights
-        new_policy = self.policy.theta + ((self.alpha / (self.b * sigma_r)) * sum_augs)
+        new_policy = self.policy.theta + ((self.alpha / (b * sigma_r)) * sum_augs)
         # print(new_policy)
 
         # Update the policy
