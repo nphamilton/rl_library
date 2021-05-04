@@ -138,7 +138,7 @@ class ContinuousActor(nn.Module):
 
         return
 
-    def forward(self, state, action=None):
+    def forward(self, state, action=None, stds=None):
         """
         This function performs a forward pass through the network.
 
@@ -156,13 +156,13 @@ class ContinuousActor(nn.Module):
         x = torch.tanh(x)
 
         # Pass through the output layer
-        x = self.out(x)
-        mu = torch.tanh(x)
+        mu = self.out(x)
+        # mu = torch.tanh(x)
 
         # Compute the log probability of taking the input action
         logp_a = None
         if action is not None:
-            logp_a = calculate_log_probability(action, mu, self.std)
+            logp_a = calculate_log_probability(action, mu, stds)
 
         # Return the result
         return mu, self.std, logp_a  # TODO modify if necessary to make discrete option match
@@ -233,7 +233,7 @@ class DiscreteActor(nn.Module):
         # Pass through the output layer
         x = self.out(x)
         x = F.relu(x)
-        pi = F.softmax(x)
+        pi = F.softmax(x, dim=0)
 
         # Compute the log probability of taking the input action
         logp_a = None

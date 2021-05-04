@@ -14,11 +14,12 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-from algorithms.abstract_algorithm import Algorithm
+from torch.distributions.normal import Normal
+# from algorithms.abstract_algorithm import Algorithm
 from algorithms.ppo.core import *
 
 
-class PPO(Algorithm):
+class PPO():
     def __init__(self, runner, num_training_steps, rollout_length=2048, evaluation_length=2048,
                  evaluation_iter=10, num_evaluations=5, random_seed=8, minibatch_size=64, num_epochs=10,
                  learning_rate=3e-4, discount_gamma=0.995, gae_lambda=0.97, clip_param=0.2,
@@ -65,6 +66,8 @@ class PPO(Algorithm):
         self.discount_gamma = discount_gamma
         self.gae_lambda = gae_lambda
         self.clip_param = clip_param
+        self.target_kl = 0.01 * 1.5
+        self.clip_param_v = 10
         self.render = render_eval
 
         # Initialize Cuda variables
@@ -82,7 +85,7 @@ class PPO(Algorithm):
                                        num_actions=runner.action_shape[0]).to(self.device)
             self.num_actions = runner.action_shape[0]
         else:
-            self.actor = ContinuousActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+            self.actor = ContinuousActor(num_inputs=runner.obs_shape[0], hidden_size1=256, hidden_size2=256,
                                          num_actions=runner.action_shape[0]).to(self.device)
             self.num_actions = None
         self.critic = PPOCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64).to(self.device)
@@ -254,41 +257,74 @@ class PPO(Algorithm):
                 np_action = means.detach().numpy()
             else:
                 # Choose a random action according to the distribution
-                random_val = torch.FloatTensor(np.random.rand(2)).cpu()
-                action = (means + stds * random_val)
-                np_action = action.detach().numpy()
+                # random_val = torch.FloatTensor(np.random.rand(2)).cpu()
+                # action = (means + stds * random_val).cpu()
+                distribution = Normal(means, stds)
+                action = distribution.rsample()
 
                 # Calculate the log probability of choosing that action
                 log_prob = calculate_log_probability(x=action, mu=means, std_devs=stds)
 
+                # Clamp the action so it does not exceed the bounds
+                np_action = action.detach().numpy()
+
         # Compute the estimated value of the current state/observation
-        val = self.critic.forward(state)
+        val = self.critic.forward(state).cpu()
         value = val.detach().numpy()[0]
+        # print(value)
 
         return np_action, log_prob, value
 
     def load_model(self, load_path=None):
         """
-        This method loads a model. The loaded model can be a previously learned policy or an initializing policy used
-        for consistency.
+        This function loads the neural network models and optimizers for both the actor and the critic from one file.
+        If a load_path is not provided, the function will not execute. For more examples on how to save/load models,
+        visit https://pytorch.org/tutorials/beginner/saving_loading_models.html
 
-        :input:
-            load_path
-        :output:
-            None
+        :param load_path:  (string) The file name where the models will be loaded from. default=None
         """
-        pass
+
+        # Load the saved file as a dictionary
+        if load_path is not None:
+            checkpoint = torch.load(load_path)
+
+            # Store the saved models
+            self.actor.load_state_dict(checkpoint['actor'])
+            self.critic.load_state_dict(checkpoint['critic'])
+            self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
+
+            # Evaluate the neural networks to ensure the weights were properly loaded
+            self.actor.eval()
+            self.critic.eval()
+
+        # Clean up any garbage that's accrued
+        gc.collect()
+
+        return
 
     def save_model(self, save_path='.'):
         """
-        This method saves the current model learned by the agent.
+        This method saves the neural network models and optimizers for both the actor and the critic in one file. For
+        more examples on how to save/load models, visit
+        https://pytorch.org/tutorials/beginner/saving_loading_models.html
 
         :input:
-            save_path
-        :output:
-            None
+            :param save_path: (string) The file name the model will be saved to. Default='model.pth'
         """
-        pass
+
+        # Save everything necessary to start up from this point
+        torch.save({
+            'actor': self.actor.state_dict(),
+            'critic': self.critic.state_dict(),
+            'actor_optimizer': self.actor_optimizer.state_dict(),
+            'critic_optimizer': self.critic_optimizer.state_dict(),
+        }, save_path)
+
+        # Clean up any garbage that's accrued
+        gc.collect()
+
+        return
 
     def train_model(self):
         """
@@ -317,6 +353,7 @@ class PPO(Algorithm):
         avg_steps = 0.0
         avg_reward = 0.0
         for j in range(self.num_evals):
+            print('evaluating...')
             reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
             # Log the evaluation run
@@ -351,11 +388,14 @@ class PPO(Algorithm):
 
             # Iterate through the number of epochs, running updates on shuffled minibatches
             indices = np.arange(ep_length)
-            for e in range(self.num_epochs):
+            e = 0
+            update_actor = True
+            while e < self.num_epochs:
                 # Shuffle the frames in the horizon
                 np.random.shuffle(indices)
 
                 # Update each shuffled minibatch (mb)
+                tot_kl = 0.0
                 for mb_start in range(0, ep_length, self.minibatch_size):
                     # Single out each minibatch from the recorded horizon
                     mb_end = mb_start + self.minibatch_size
@@ -376,9 +416,19 @@ class PPO(Algorithm):
 
                     # print('updating...')
                     # Update the shuffled minibatch
-                    actor_loss, critic_loss = self.update_model(mb_states, mb_actions, mb_log_probs, mb_returns,
-                                                                mb_advs, mb_values)
-                    # print(f'Actor loss: {actor_loss}, Critic Loss: {critic_loss}')
+                    actor_loss, critic_loss, kl = self.update_model(mb_states, mb_actions, mb_log_probs, mb_returns,
+                                                                mb_advs, mb_values, update_actor)
+                    tot_kl += kl
+                    # print('Actor loss: ' + str(actor_loss) + ', Critic Loss: ' + str(critic_loss))
+                
+                avg_kl = tot_kl / (ep_length // self.minibatch_size)
+                if avg_kl > self.target_kl:
+                    print('Max KL reached: ' + str(avg_kl) + ' after ' + str(e) + ' updates.')
+                    update_actor = False
+                    
+                e += 1
+
+
 
             # Evaluate the model
             eval_count += 1
@@ -388,6 +438,7 @@ class PPO(Algorithm):
                 avg_steps = 0.0
                 avg_reward = 0.0
                 for j in range(self.num_evals):
+                    print('evaluating...')
                     reward, eval_steps, done, exit_cond = self.evaluate_model(self.eval_len)
 
                     # Log the evaluation run
@@ -425,7 +476,7 @@ class PPO(Algorithm):
 
         return final_policy_reward_sum, execution_time, training_time
 
-    def update_model(self, states, actions, old_log_probs, returns, advantages, old_values):
+    def update_model(self, states, actions, old_log_probs, returns, advantages, old_values, update_actor):
         """
         This function updates neural networks for the actor and critic using back-propogation. More information about
         this process can be found in the PPO paper (https://arxiv.org/abs/1707.06347) and the pytorch implementation
@@ -444,17 +495,20 @@ class PPO(Algorithm):
 
         # Calculate new values and log probabilities
         states = Variable(torch.FloatTensor(states).to(self.device), requires_grad=True)
-        new_log_probs = []
-        if self.is_discrete:
-            # actions = Variable(torch.LongTensor(actions).to(self.device), requires_grad=True)
-            for i in range(len(actions)):
-                _, log_prob = self.actor.forward(states[i], actions[i])
-                new_log_probs.append(log_prob)
-        else:
-            actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
-            for i in range(len(actions)):
-                _, _, log_prob = self.actor.forward(states[i], actions[i])
-                new_log_probs.append(log_prob)
+
+        if update_actor:
+            new_log_probs = []
+            if self.is_discrete:
+                # actions = Variable(torch.LongTensor(actions).to(self.device))  # , requires_grad=True)
+                for i in range(len(actions)):
+                    _, log_prob = self.actor.forward(states[i], actions[i])
+                    new_log_probs.append(log_prob)
+            else:
+                actions = Variable(torch.FloatTensor(actions).to(self.device), requires_grad=True)
+                std = torch.FloatTensor(self.actor.std).to(self.device)
+                for i in range(len(actions)):
+                    _, _, log_prob = self.actor.forward(states[i], actions[i], stds=std)
+                    new_log_probs.append(log_prob)
         new_values = self.critic.forward(states)
 
         # print(new_log_probs)
@@ -463,32 +517,40 @@ class PPO(Algorithm):
         old_values = torch.FloatTensor(old_values).detach().to(self.device)
         new_values = new_values.to(self.device)
         returns = torch.FloatTensor(returns).detach().to(self.device)
-        old_log_probs = torch.FloatTensor(old_log_probs).detach().to(self.device)
-        new_log_probs = torch.stack(new_log_probs).to(self.device)
 
-        # print(new_log_probs)
+        if update_actor:
+            old_log_probs = torch.FloatTensor(old_log_probs).detach().to(self.device)
+            new_log_probs = torch.stack(new_log_probs).to(self.device)
 
-        # Calculate the advantage and normalize it
-        # advantages = returns - old_values
-        advantages = torch.FloatTensor(advantages).to(self.device)
+            # print(new_log_probs)
 
-        # Compute the actor loss function with clipping
-        ratio = (new_log_probs - old_log_probs).exp()
-        loss_not_clipped = ratio * advantages
-        loss_clipped = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages
-        actor_loss = -torch.min(loss_not_clipped, loss_clipped).mean()
+            # Calculate the advantage and normalize it
+            # advantages = returns - old_values
+            advantages = torch.FloatTensor(advantages).to(self.device)
 
-        # Update actor using actor optimizer
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self.actor_optimizer.step()
+            # Compute the actor loss function with clipping
+            ratio = (new_log_probs - old_log_probs).exp()
+            loss_not_clipped = ratio * advantages
+            loss_clipped = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages
+            actor_loss = -torch.min(loss_not_clipped, loss_clipped).mean()
+
+            kl = (old_log_probs - new_log_probs).mean().cpu()
+
+            # Update actor using actor optimizer
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+        
+        else:
+            kl = 0.0
+            actor_loss = torch.FloatTensor([0.0]).to(self.device)
 
         # Compute the critic loss function with clipping
-        # clipped_values = old_values + torch.clamp((new_values - old_values), -self.clip_param, self.clip_param)
-        # closs_clipped = (returns - clipped_values).pow(2)
-        # closs_not_clipped = (returns - new_values).pow(2)
-        # critic_loss = 0.5 * torch.max(closs_clipped, closs_not_clipped).mean()
-        critic_loss = (returns - new_values).pow(2).mean()
+        clipped_values = old_values + torch.clamp((new_values - old_values), -self.clip_param_v, self.clip_param_v)
+        closs_clipped = (returns - clipped_values).pow(2)
+        closs_not_clipped = (returns - new_values).pow(2)
+        critic_loss = 0.5 * torch.max(closs_clipped, closs_not_clipped).mean()
+        # critic_loss = (returns - new_values).pow(2).mean()
 
         # Update critic using critic optimizer
         self.critic_optimizer.zero_grad()
@@ -497,8 +559,8 @@ class PPO(Algorithm):
 
         # new_params = list(self.actor.parameters())[0].clone()
         # print(torch.equal(new_params.data, self.old_params.data))
-        #
+        
         # self.old_params = new_params
 
         # Output the loss values for logging purposes
-        return actor_loss.cpu(), critic_loss.cpu()
+        return actor_loss.cpu(), critic_loss.cpu(), kl

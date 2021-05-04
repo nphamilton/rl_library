@@ -16,12 +16,12 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
-from algorithms.abstract_algorithm import Algorithm
+# from algorithms.abstract_algorithm import Algorithm
 from utils.replay_buffer import *
 from algorithms.sac.core import *
 
 
-class SAC(Algorithm):
+class SAC():
     def __init__(self, runner, num_training_steps, rollout_length=1000, evaluation_length=-1,
                  evaluation_iter=10, num_evaluations=5, random_seed=8, replay_capacity=1000000, batch_size=256,
                  learning_rate=1e-4, alpha=0.2, gamma=0.99, tau=0.005, log_path='.',
@@ -86,8 +86,11 @@ class SAC(Algorithm):
         torch.manual_seed(random_seed)
         torch.cuda.manual_seed_all(random_seed)
 
+        hidden1 = 128
+        hidden2 = 128
+
         # Create the actor and critic neural network
-        self.actor = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+        self.actor = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=hidden1, hidden_size2=hidden2,
                               num_actions=runner.action_shape[0]).to(self.device)
         self.critic1 = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                  num_actions=runner.action_shape[0]).to(self.device)
@@ -95,7 +98,7 @@ class SAC(Algorithm):
                                  num_actions=runner.action_shape[0]).to(self.device)
 
         # Create the target networks
-        self.actor_target = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
+        self.actor_target = SACActor(num_inputs=runner.obs_shape[0], hidden_size1=hidden1, hidden_size2=hidden2,
                                      num_actions=runner.action_shape[0]).to(self.device)
         self.critic1_target = SACCritic(num_inputs=runner.obs_shape[0], hidden_size1=64, hidden_size2=64,
                                         num_actions=runner.action_shape[0]).to(self.device)
@@ -136,7 +139,7 @@ class SAC(Algorithm):
 
         # Initialize variables used by the learner
         self.replay_buffer = ReplayBuffer(self.capacity)
-        # self.old_params = list(self.actor.parameters())[0].clone()
+        self.old_params = list(self.actor.parameters())[0].clone()
 
     def evaluate_model(self, evaluation_length=-1):
         """
@@ -161,6 +164,7 @@ class SAC(Algorithm):
         # Start the evaluation from a safe starting point
         self.runner.reset(evaluate=True)
         state = self.runner.get_state()
+        # print(state)
         done = 0
         exit_cond = 0
 
@@ -173,7 +177,7 @@ class SAC(Algorithm):
 
             # Determine the next action
             action = self.get_action(state, deterministic=True)  # No noise injected during evaluation
-            print(action)
+            # print(action)
 
             # Execute determined action
             next_state, reward, done, exit_cond = self.runner.step(action, render=self.render)
@@ -486,7 +490,7 @@ class SAC(Algorithm):
 
         # new_params = list(self.actor.parameters())[0].clone()
         # print(torch.equal(new_params.data, self.old_params.data))
-        #
+        
         # self.old_params = new_params
 
         # Output the loss values for logging purposes

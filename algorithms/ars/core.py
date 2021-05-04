@@ -45,7 +45,7 @@ class ARSPolicy(object):
             self.__push(state)
 
         # Normalize the state
-        state = self.__normalize(state)
+        # state = self.__normalize(state)
 
         # Determine the action
         if weights is None:
