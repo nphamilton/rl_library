@@ -150,7 +150,8 @@ class AvgBuckConverter(Runner):
 
         # Compute the reward
         # reward = -1 * next_obs[0]**2  # -(Vref - v)^2
-        reward = -1 * (self.Vdes - self.state[1]) ** 2  # -(Vdes - Vout)^2
+        reward = -1 * abs(self.Vdes - self.state[1])  # -|Vdes - Vout|
+        # print(f'Vdes: {self.Vdes}, v_c: {self.state[1]}, reward: {reward}')
 
         # Determine if the state is terminal
         done = 0
@@ -197,9 +198,12 @@ class AvgBuckConverter(Runner):
             self.time = 0
             self.stable_count = 0
         else:
-            self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
-            self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
-            self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
+            # self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
+            # self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
+            # self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
+            self.C = self.capacitor_nom
+            self.L = self.inductor_nom
+            self.R = self.load_nom
             self.state = np.asarray(
                 [np.random.uniform(self.min_init[i], self.max_init[i]) for i in range(len(self.state))])
             # self.state = self.eval_init
