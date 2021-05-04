@@ -75,7 +75,7 @@ class AvgBuckConverter(Runner):
         self.C = capacitor_value
         self.L = inductor_value
         self.R = load_avg
-        self.max_time = 1. / (self.R * self.C)
+        self.max_time = 0.1 / (self.R * self.C)
         self.state = np.zeros_like(self.max_state)
         self.scale_mult = (self.max_action - self.min_action) / 2.0
         self.scale_add = (self.max_action - self.min_action) / 2.0 + self.min_action
@@ -90,7 +90,7 @@ class AvgBuckConverter(Runner):
         """
         i = self.state[0]
         v = self.state[1]
-        observation = np.asarray([(self.Vref - v), self.Vref, v, i])
+        observation = np.asarray([(self.Vref - v), self.Vref, v, i]) / 10.
         return observation
 
     def is_available(self):
@@ -135,12 +135,13 @@ class AvgBuckConverter(Runner):
         start_time = self.time
         for i in time_range:
             Vref = self.Vref  # + self.amp*np.sin(self.freq*(start_time + i))
-            D = Vref / self.Vs
+            D = 1.0  # Vref / self.Vs
             B = D * np.asarray([self.Vs / self.L, 0.0])
             dx = np.dot(A, x_next) + np.multiply(B, action)
             # print(dx*self.dt)
             x_next = x_next + dx * 0.0000001
         # print(f'next = {x_next}')
+        x_next = np.minimum(np.maximum(x_next, self.min_state), self.max_state)
 
         # Store and convert values
         self.state = x_next
@@ -149,12 +150,12 @@ class AvgBuckConverter(Runner):
 
         # Compute the reward
         # reward = -1 * next_obs[0]**2  # -(Vref - v)^2
-        reward = -1 * (self.Vdes - next_obs[2]) ** 2  # -(Vdes - Vout)^2
+        reward = -1 * (self.Vdes - self.state[1]) ** 2  # -(Vdes - Vout)^2
 
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
-        if np.sum(x - x_next) == 0.0 and abs(next_obs[2] - self.Vdes) <= 0.1:
+        if np.sum(x - x_next) == 0.0 and abs(self.state[1] - self.Vdes) <= 0.1:
             self.stable_count += 1
         else:
             self.stable_count = 0
@@ -164,11 +165,13 @@ class AvgBuckConverter(Runner):
             print('time exceeded: ' + str(self.time) + ' of ' + str(self.max_time))
             exit_cond = 1
         if np.any(np.less(x_next, self.min_state)) or np.any(np.less(self.max_state, x_next)):
-            print(np.less(x, self.min_state))
-            print(np.less(self.max_state, x))
+            # print(np.less(x, self.min_state))
+            # print(np.less(self.max_state, x))
             exit_cond = 1
             reward = -100.
 
+        if render:
+            print(f'step count: {round(self.time / self.dt)}, state: {x_next}, action: {action}, reward: {reward}')
         return next_obs, reward, done, exit_cond
 
     def stop(self):
@@ -199,6 +202,7 @@ class AvgBuckConverter(Runner):
             self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
             self.state = np.asarray(
                 [np.random.uniform(self.min_init[i], self.max_init[i]) for i in range(len(self.state))])
+            # self.state = self.eval_init
             self.time = 0
             self.stable_count = 0
 

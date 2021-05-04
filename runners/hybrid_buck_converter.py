@@ -21,7 +21,7 @@ class HybridBuckConverter(Runner):
                  switching_frequency=10e3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
                  switching_loss=0.0, inductor_loss=0.0,
                  max_action=np.array([0.95]), min_action=np.array([0.05]),
-                 max_state=np.array([1000., 1000.]), min_state=None, scale=1,
+                 max_power=300., scale=1,
                  max_init_state=np.array([3., 3.]), min_init_state=None,
                  evaluation_init=np.array([0., 0.])):
         """
@@ -73,11 +73,9 @@ class HybridBuckConverter(Runner):
         else:
             self.min_action = min_action
 
-        self.max_state = max_state
-        if min_state is None:
-            self.min_state = -max_state
-        else:
-            self.min_state = min_state
+        self.min_state = np.asarray([-0.001, -0.001])
+        max_current = max_power / source_voltage
+        self.max_state = np.asarray([1000., 1000.])  # np.asarray([max_current, source_voltage])
 
         self.max_init = max_init_state
         if min_init_state is None:
@@ -102,8 +100,11 @@ class HybridBuckConverter(Runner):
         # Generate the sawtooth function that is used for determining if the switch is open or closed
         # TODO: explain how this works
         self.sawtooth_period = 1. / self.switch_freq
-        sawtooth_t = np.arange(0., 1., self.sim_dt / self.sawtooth_period)
-        self.sawtooth = signal.sawtooth(2 * np.pi * sawtooth_t)
+        # sawtooth_t = np.arange(0., 1., self.sim_dt / self.sawtooth_period)
+        steps_in_2_periods = round((2 * self.sawtooth_period) / self.sim_dt)
+        # print(steps_in_2_periods)
+        sawtooth_t = np.linspace(0., (steps_in_2_periods * self.sim_dt), steps_in_2_periods)
+        self.sawtooth = (signal.sawtooth(2 * np.pi * self.switch_freq * sawtooth_t) + 1.) / 2.
         # print(self.sawtooth)
         self.sawtooth_len = len(self.sawtooth)
         # print(self.sawtooth_len)
@@ -142,7 +143,7 @@ class HybridBuckConverter(Runner):
         B = np.array([self.Vs / self.L, 0.0])
         x_next = copy.copy(x_start)
         t = t_start
-        pos = int((t / self.sawtooth_period) % self.sawtooth_len)
+        pos = int((t / self.sim_dt) % self.sawtooth_len)
         # print("charge pos: " + str(pos))
         while t <= t_max and self.sawtooth[pos] <= threshold:
             dx = np.dot(A, x_next) + B
@@ -158,37 +159,48 @@ class HybridBuckConverter(Runner):
 
     def __discharging_dynamics(self, x_start, load, t_start, threshold, t_max):
         """
-        In this function, the state is changing according to the discharging dynamics. The system is charging when the
-        switch is open, i.e. sawtooth_pwm - threshold > 0. This might also be referred to as "open". The transition
+        In this function, the state is changing according to the discharging dynamics. The system is discharging when
+        the switch is open, i.e. sawtooth_pwm - threshold > 0. This might also be referred to as "open". The transition
         matrices are defined as:
-            A = [-1*(rs+rL)/L, -1/L;
+            A = [-rL/L, -1/L;
                  1/C,          -1/(R*C)]
         where x' = Ax
         :return:
         """
-        A = np.array([[-1 * (self.rs + self.rL) / self.L, -1.0 / self.L], [1.0 / self.C, -1.0 / (load * self.C)]])
+        # Make sure the current is positive, jumping to discontinuous dynamics if it isn't
+        if x_start[0] <= 0.0:
+            # print('Not discharging. Oops!')
+            return x_start, 2, t_start
+
+        A = np.array([[-1 * self.rL / self.L, -1.0 / self.L], [1.0 / self.C, -1.0 / (load * self.C)]])
         x_next = copy.copy(x_start)
         mode_next = 0  # The default next mode after discharging is to charge again
         t = t_start
-        pos = int((t / self.sawtooth_period) % self.sawtooth_len)
-        # print("disrcharge pos: " + str(pos))
+        pos = int((t / self.sim_dt) % self.sawtooth_len)
+        # print("discharge pos: " + str(pos))
+        # print(f't <= t_max: {t <= t_max}, sawtooth[pos] > threshold: {self.sawtooth[pos] > threshold}')
         while t <= t_max and self.sawtooth[pos] > threshold:
             dx = np.dot(A, x_next)
-            x_next = x_next + dx * self.sim_dt
+            x_next_temp = x_next + dx * self.sim_dt
             t += self.sim_dt
             pos += 1
             if pos >= self.sawtooth_len:
                 pos = pos % self.sawtooth_len
 
-            # TODO
-            if x_next[0] <= 0.0:
-                mode_next = 2  # If the current is <= 0, the next mode is discontinuous
+            # If the current is <= 0, the next mode is discontinuous
+            if x_next_temp[0] <= 0.0:
+                # print(f'undoing discharge step: {x_next_temp[0]}')
+                mode_next = 2
+                t -= self.sim_dt
                 break
+            else:
+                x_next = x_next_temp
+        # print(f't <= t_max: {t <= t_max}, sawtooth[pos] > threshold: {self.sawtooth[pos] > threshold}')
         time_covered = t - t_start
 
         return x_next, mode_next, time_covered
 
-    def __discontinuous_dynamics(self, x_start, load, t_start, t_max):
+    def __discontinuous_dynamics(self, x_start, load, t_start, threshold, t_max):
         """
         In this function, the state is changing according to the discontinuous dynamics. The transition matrices are
         defined as:
@@ -200,17 +212,20 @@ class HybridBuckConverter(Runner):
         A = np.array([[0.0, 0.0], [0.0, -1.0 / (load * self.C)]])
         x_next = copy.copy(x_start)
         t = t_start
+        pos = int((t / self.sim_dt) % self.sawtooth_len)
         while t <= t_max:
             dx = np.dot(A, x_next)
             x_next = x_next + dx * self.sim_dt
             t += self.sim_dt
+            pos += 1
+            if pos >= self.sawtooth_len:
+                pos = pos % self.sawtooth_len
 
-            if (x_next[0] >= 0.0) and (x_next[1] <= self.Vref):
+            if (x_next[0] >= 0.0) and (self.sawtooth[pos] > threshold):
                 # If the current is above 0 and the voltage is below the reference point, then the mode switches back
                 # to charging
                 break
         time_covered = t - t_start
-
         mode_next = 0  # The next mode after discontinuous is always charging
 
         return x_next, mode_next, time_covered
@@ -260,7 +275,7 @@ class HybridBuckConverter(Runner):
                 x_next, mode_next, time_covered = self.__discharging_dynamics(x_next, load, t, action, t_fin)
             elif mode == 2:  # If the mode is 'discontinuous'
                 # print("discontinuous")
-                x_next, mode_next, time_covered = self.__discontinuous_dynamics(x_next, load, t, t_fin)
+                x_next, mode_next, time_covered = self.__discontinuous_dynamics(x_next, load, t, action, t_fin)
             else:
                 print('This mode does not exist and the code is broken')
                 time_covered = 0.
@@ -268,25 +283,14 @@ class HybridBuckConverter(Runner):
             # print("time_covered " + str(time_covered))
             t += time_covered
             # print("next time: " + str(t))
+            # Ensure the state never exceeds the physical bounds
+            # x_next = np.minimum(np.maximum(x_next, self.min_state), self.max_state)
             mode = mode_next
-
-
-        # x_next = copy.copy(x)
-        # time_range = np.arange(0, self.dt, 0.0000001)
-        # start_time = self.time
-        # for i in time_range:
-        #     Vref = self.Vref  # + self.amp*np.sin(self.freq*(start_time + i))
-        #     D = Vref / self.Vs
-        #     B = D * np.asarray([self.Vs / self.L, 0.0])
-        #     dx = np.dot(self.A, x_next) + np.multiply(B, action)
-        #     # print(dx*self.dt)
-        #     x_next = x_next + dx*0.0000001
-        # print(f'next = {x_next}')
 
         # Store and convert values
         self.state = x_next
         # print(x_next)
-        self.mode = mode_next
+        self.mode = mode
         next_obs = self.get_state()
         self.time += self.dt
 
@@ -297,7 +301,7 @@ class HybridBuckConverter(Runner):
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
-        if np.sum(x - x_next) == 0.0 and abs(next_obs[2] - self.Vdes) <= 0.1:
+        if np.sum(x - x_next) <= 0.1 and abs(next_obs[2] - self.Vdes) <= 0.1:
             self.stable_count += 1
             # print("stable " + str(self.stable_count))
         else:
@@ -309,10 +313,12 @@ class HybridBuckConverter(Runner):
         if np.any(np.less(x_next, self.min_state)) or np.any(np.less(self.max_state, x_next)):
             print(f'observed state is below the min: {np.less(x_next, self.min_state)}')
             print(f'observed state is above the max: {np.less(self.max_state, x_next)}')
-            print(f'state: {x}')
+            print(f'state: {x_next}, step count: {self.time / self.dt}')
             exit_cond = 1
             reward = -100.
 
+        if render:
+            print(f'step count: {round(self.time / self.dt)}, state: {x_next}, action: {action}, reward: {reward}')
         return next_obs, reward, done, exit_cond
 
     def stop(self):
@@ -337,14 +343,17 @@ class HybridBuckConverter(Runner):
             self.state = self.eval_init
             self.time = 0.0
             self.stable_count = 0
+            self.mode = 0
         else:
             self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
             self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
             self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
             self.state = np.asarray(
                 [np.random.uniform(self.min_init[i], self.max_init[i]) for i in range(len(self.state))])
+            # self.state = self.eval_init
             self.time = 0.0
             self.stable_count = 0
+            self.mode = 0
 
         return
 
