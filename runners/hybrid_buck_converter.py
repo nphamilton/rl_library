@@ -296,12 +296,12 @@ class HybridBuckConverter(Runner):
 
         # Compute the reward
         # reward = -1 * next_obs[0]**2  # -(Vref - v)^2
-        reward = -1 * (self.Vdes - next_obs[2]) ** 2  # -(Vdes - Vout)^2
+        reward = -1 * (self.Vdes - self.state[1]) ** 2  # -(Vdes - Vout)^2
 
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
-        if np.sum(x - x_next) <= 0.1 and abs(next_obs[2] - self.Vdes) <= 0.1:
+        if np.sum(x - x_next) <= 0.1 and abs(self.state[1] - self.Vdes) <= 0.1:
             self.stable_count += 1
             # print("stable " + str(self.stable_count))
         else:

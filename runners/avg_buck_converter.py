@@ -156,7 +156,7 @@ class AvgBuckConverter(Runner):
         # Determine if the state is terminal
         done = 0
         exit_cond = 0
-        if np.sum(x - x_next) == 0.0 and abs(self.state[1] - self.Vdes) <= 0.1:
+        if np.sum(x - x_next) <= 0.1 and abs(self.state[1] - self.Vdes) <= 0.1:
             self.stable_count += 1
         else:
             self.stable_count = 0

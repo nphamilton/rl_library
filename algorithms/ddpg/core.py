@@ -90,11 +90,11 @@ class DDPGActor(nn.Module):
 
         # The first layer
         self.linear1 = nn.Linear(num_inputs, hidden_size1)
-        self.ln1 = nn.LayerNorm(hidden_size1)
+        # self.ln1 = nn.LayerNorm(hidden_size1)
 
         # The second layer
         self.linear2 = nn.Linear(hidden_size1, hidden_size2)
-        self.ln2 = nn.LayerNorm(hidden_size2)
+        # self.ln2 = nn.LayerNorm(hidden_size2)
 
         # The output layer
         self.out = nn.Linear(hidden_size2, num_actions)
@@ -136,12 +136,12 @@ class DDPGActor(nn.Module):
         # Pass through layer 1
         x = self.linear1(state)
         x = F.relu(x)
-        x = self.ln1(x)
+        # x = self.ln1(x)
 
         # Pass through layer 2
         x = self.linear2(x)
         x = F.relu(x)
-        x = self.ln2(x)
+        # x = self.ln2(x)
 
         # Pass through the output layer
         x = self.out(x)
@@ -255,11 +255,9 @@ class VerivitalActor(nn.Module):
 
         # The first layer
         self.linear1 = nn.Linear(num_inputs, hidden_size1)
-        # self.ln1 = nn.LayerNorm(hidden_size1)
 
         # The second layer
         self.linear2 = nn.Linear(hidden_size1, hidden_size2)
-        # self.ln2 = nn.LayerNorm(hidden_size2)
 
         # The output layer
         self.out = nn.Linear(hidden_size2, num_actions)
@@ -301,12 +299,10 @@ class VerivitalActor(nn.Module):
         # Pass through layer 1
         x = self.linear1(state)
         x = F.relu(x)
-        # x = self.ln1(x)
 
         # Pass through layer 2
         x = self.linear2(x)
         x = F.relu(x)
-        # x = self.ln2(x)
 
         # Pass through the output layer
         x = self.out(x)

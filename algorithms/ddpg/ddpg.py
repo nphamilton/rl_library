@@ -281,7 +281,7 @@ class DDPG():
             self.critic_target.load_state_dict(checkpoint['critic_target'])
             self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer'])
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
-            self.replay_buffer = ReplayBuffer(checkpoint['replay_buffer'])
+            self.replay_buffer = ReplayBuffer(self.capacity, checkpoint['replay_buffer'])
 
             # Evaluate the neural networks to ensure the weights were properly loaded
             self.actor.eval()
