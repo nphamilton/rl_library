@@ -400,9 +400,9 @@ class DDPG():
                       ', Avg Acc Reward: ' + str(avg_reward / self.num_evals))
 
                 # Save the model that achieved this performance
-                # print('saving...')
-                # save_path = self.save_path + '/step_' + str(step) + '_model.pth'
-                # self.save_model(save_path=save_path)
+                print('saving...')
+                save_path = self.save_path + '/step_' + str(step) + '_model.pth'
+                self.save_model(save_path=save_path)
 
                 # Do not count the time taken to evaluate and save the model as training time
                 t_eval_end = time.time()

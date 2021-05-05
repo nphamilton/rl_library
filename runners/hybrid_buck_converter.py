@@ -21,7 +21,7 @@ class HybridBuckConverter(Runner):
                  switching_frequency=10e3, source_voltage=10.0, reference_voltage=9.0, desired_voltage=6.0,
                  switching_loss=0.0, inductor_loss=0.0,
                  max_action=np.array([0.95]), min_action=np.array([0.05]),
-                 max_power=300., scale=1,
+                 max_state=np.array([1000., 1000.]), min_state=np.array([-100., -100.]), scale=1,
                  max_init_state=np.array([3., 3.]), min_init_state=None,
                  evaluation_init=np.array([0., 0.])):
         """
@@ -73,9 +73,8 @@ class HybridBuckConverter(Runner):
         else:
             self.min_action = min_action
 
-        self.min_state = np.asarray([-0.001, -0.001])
-        max_current = max_power / source_voltage
-        self.max_state = np.asarray([1000., 1000.])  # np.asarray([max_current, source_voltage])
+        self.min_state = min_state
+        self.max_state = max_state
 
         self.max_init = max_init_state
         if min_init_state is None:
@@ -345,9 +344,12 @@ class HybridBuckConverter(Runner):
             self.stable_count = 0
             self.mode = 0
         else:
-            self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
-            self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
-            self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
+            # self.C = np.random.uniform(self.capacitor_range[0], self.capacitor_range[1], 1)[0]
+            # self.L = np.random.uniform(self.inductor_range[0], self.inductor_range[1], 1)[0]
+            # self.R = np.random.uniform(self.load_range[0], self.load_range[1], 1)[0]
+            self.C = self.capacitor_nom
+            self.L = self.inductor_nom
+            self.R = self.load_nom
             self.state = np.asarray(
                 [np.random.uniform(self.min_init[i], self.max_init[i]) for i in range(len(self.state))])
             # self.state = self.eval_init

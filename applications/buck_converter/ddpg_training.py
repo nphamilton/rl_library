@@ -36,6 +36,23 @@ if __name__ == '__main__':
     #                              max_init_state=np.array([3., 48.]), min_init_state=np.array([0., 0.]),
     #                              evaluation_init=np.array([0., 0.]))
 
+    learner = DDPG(runner=runner, num_training_steps=100000, time_per_step=sample_time,
+                   architecture='verivital',
+                   log_path='./ignore/',
+                   save_path='./ignore/',
+                   load_path=path + '/models/final_model.pth',
+                   render_eval=True)
+
+    runner.reset(evaluate=True)
+    obs = runner.get_state()
+    tot_reward = 0.0
+    for i in range(200):
+        obs, reward, done, exit_cond = runner.step(learner.get_action(obs), render=False)
+        tot_reward += reward
+        if done or exit_cond:
+            break
+    print(f'total reward: {tot_reward}, done: {done}')
+
     # runner.reset(evaluate=True)
     # tot_reward = 0.0
     # for i in range(200):
@@ -54,39 +71,40 @@ if __name__ == '__main__':
     #         break
     # print(f'If a = 0 the whole sim, the reward is: {tot_reward}')
     #
-    runner.reset(evaluate=True)
-    tot_reward = 0.0
-    for i in range(200):
-        _, reward, done, exit_cond = runner.step(np.asarray([-0.04]), render=False)
-        tot_reward += reward
-        if done or exit_cond:
-            break
-    print(f'If a = 0.48 (the ideal) the whole sim, the reward is: {tot_reward}')
+    # runner.reset(evaluate=True)
+    # tot_reward = 0.0
+    # for i in range(200):
+    #     _, reward, done, exit_cond = runner.step(np.asarray([-0.04]), render=False)
+    #     tot_reward += reward
+    #     if done or exit_cond:
+    #         break
+    # print(f'If a = 0.48 (the ideal) the whole sim, the reward is: {tot_reward}')
 
     # Create the learner
-    learner = DDPG(runner=runner, num_training_steps=100000, time_per_step=sample_time, rollout_length=rollout_length,
-                   evaluation_length=200,  # -1,
-                   evaluation_iter=1,
-                   num_evaluations=1, random_seed=1738, replay_capacity=1000000, batch_size=64,
-                   architecture='standard', actor_learning_rate=1e-4,
-                   critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2,
-                   noise_theta=0.15,
-                   log_path=path,
-                   save_path=path + '/models',
-                   load_path=None,
-                   render_eval=False)
-
-    learner.train_model()
-
-    """ Save the last model as a .mat file """
-    weights = [learner.actor.state_dict()['linear1.weight'].numpy(),
-               learner.actor.state_dict()['linear2.weight'].numpy(),
-               learner.actor.state_dict()['out.weight'].numpy()]
-    biases = [learner.actor.state_dict()['linear1.bias'].numpy(),
-              learner.actor.state_dict()['linear2.bias'].numpy(),
-              learner.actor.state_dict()['out.bias'].numpy()]
-
-    savemat(path + '/final_model.mat', mdict={'W': weights, 'b': biases})
+    # learner = DDPG(runner=runner, num_training_steps=100000, time_per_step=sample_time, rollout_length=rollout_length,
+    #                evaluation_length=200,  # -1,
+    #                evaluation_iter=1,
+    #                num_evaluations=1, random_seed=1738,
+    #                replay_capacity=1000000, batch_size=64,
+    #                architecture='standard', actor_learning_rate=1e-4,
+    #                critic_learning_rate=1e-3, weight_decay=1e-2, gamma=0.99, tau=0.001, noise_sigma=0.2,
+    #                noise_theta=0.15,
+    #                log_path=path,
+    #                save_path=path + '/models',
+    #                load_path=None,
+    #                render_eval=False)
+    #
+    # learner.train_model()
+    #
+    # """ Save the last model as a .mat file """
+    # weights = [learner.actor.state_dict()['linear1.weight'].numpy(),
+    #            learner.actor.state_dict()['linear2.weight'].numpy(),
+    #            learner.actor.state_dict()['out.weight'].numpy()]
+    # biases = [learner.actor.state_dict()['linear1.bias'].numpy(),
+    #           learner.actor.state_dict()['linear2.bias'].numpy(),
+    #           learner.actor.state_dict()['out.bias'].numpy()]
+    #
+    # savemat(path + '/final_model.mat', mdict={'W': weights, 'b': biases})
 
     # """ Plot an evaluation """
     # step = 0
