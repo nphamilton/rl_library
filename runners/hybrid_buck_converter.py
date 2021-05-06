@@ -118,7 +118,7 @@ class HybridBuckConverter(Runner):
         """
         i = self.state[0]
         v = self.state[1]
-        observation = np.asarray([(self.Vref - v), self.Vref, v, i])
+        observation = np.asarray([(self.Vref - v), self.Vref, v, i]) / 10
         return observation
 
     def is_available(self):
@@ -294,8 +294,8 @@ class HybridBuckConverter(Runner):
         self.time += self.dt
 
         # Compute the reward
-        # reward = -1 * next_obs[0]**2  # -(Vref - v)^2
-        reward = -1 * (self.Vdes - self.state[1]) ** 2  # -(Vdes - Vout)^2
+        # reward = -1 * (self.Vdes - self.state[1]) ** 2  # -(Vdes - Vout)^2
+        reward = -1 * abs(self.Vdes - self.state[1])  # -|Vdes - Vout|
 
         # Determine if the state is terminal
         done = 0
