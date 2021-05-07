@@ -20,14 +20,14 @@ def run_evaluation(runner, learner, eval_length, name):
     acc_reward = np.zeros_like(time)
     for i in range(eval_length):
         time[i] = i * sample_time
-        i_l[i] = obs[3] * 10.0  # In environment, observation values are divided by 10, so must undue that
-        v_c[i] = obs[2] * 10.0  # In environment, observation values are divided by 10, so must undue that
+        i_l[i] = obs[3]
+        v_c[i] = obs[2]
         acc_reward[i] = tot_reward
         obs, reward, _, _ = runner.step(learner.get_action(obs), render=False)
         tot_reward += reward
     time[eval_length] = eval_length * sample_time
-    i_l[eval_length] = obs[3] * 10.0  # In environment, observation values are divided by 10, so must undue that
-    v_c[eval_length] = obs[2] * 10.0  # In environment, observation values are divided by 10, so must undue that
+    i_l[eval_length] = obs[3]
+    v_c[eval_length] = obs[2]
     acc_reward[eval_length] = tot_reward
 
     data = pd.DataFrame({
@@ -54,14 +54,14 @@ def run_baseline_evaluation(runner, v_ref, v_s, eval_length):
     acc_reward = np.zeros_like(time)
     for i in range(eval_length):
         time[i] = i * sample_time
-        i_l[i] = obs[3] * 10.0  # In environment, observation values are divided by 10, so must undue that
-        v_c[i] = obs[2] * 10.0  # In environment, observation values are divided by 10, so must undue that
+        i_l[i] = obs[3]
+        v_c[i] = obs[2]
         acc_reward[i] = tot_reward
         obs, reward, _, _ = runner.step(np.asarray([const_action]), render=False)
         tot_reward += reward
     time[eval_length] = eval_length * sample_time
-    i_l[eval_length] = obs[3] * 10.0  # In environment, observation values are divided by 10, so must undue that
-    v_c[eval_length] = obs[2] * 10.0  # In environment, observation values are divided by 10, so must undue that
+    i_l[eval_length] = obs[3]
+    v_c[eval_length] = obs[2]
     acc_reward[eval_length] = tot_reward
 
     data = pd.DataFrame({

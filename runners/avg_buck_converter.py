@@ -90,7 +90,7 @@ class AvgBuckConverter(Runner):
         """
         i = self.state[0]
         v = self.state[1]
-        observation = np.asarray([(self.Vref - v), self.Vref, v, i]) / 10.
+        observation = np.asarray([(self.Vref - v), self.Vref, v, i])
         return observation
 
     def is_available(self):
