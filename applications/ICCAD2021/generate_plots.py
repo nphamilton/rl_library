@@ -21,14 +21,14 @@ if __name__ == '__main__':
 
     # Plot the training curve from training in averaged dynamics environment
     fig1 = sns.relplot(x="training steps", y="reward", kind="line", data=avg_dynamics_train_data)
-    fig1.fig.suptitle("Training Curve with Averaged Dynamics")
-    fig1.set(xlim=[0, 100000], ylim=[-11000, 1000])
+    # fig1.fig.suptitle("Training Curve with Averaged Dynamics")
+    # fig1.set(ylim=[-2500, 1000])
     plt.savefig('./figures/figure1_avg_dynamics_training_curve.pdf')
 
     # Plot the training curve from training in hybrid dynamics environment
     fig2 = sns.relplot(x="training steps", y="reward", kind="line", data=hybrid_dynamics_train_data)
-    fig2.fig.suptitle("Training Curve with Hybrid Dynamics")
-    fig2.set(xlim=[0, 100000], ylim=[-11000, 1000])
+    # fig2.fig.suptitle("Training Curve with Hybrid Dynamics")
+    # fig2.set(ylim=[-2500, 1000])
     plt.savefig('./figures/figure2_hybrid_dynamics_training_curve.pdf')
 
     # Plot the evaluation simulation results within the averaged dynamics environment

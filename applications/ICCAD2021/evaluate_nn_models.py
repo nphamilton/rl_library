@@ -12,12 +12,12 @@ from runners.hybrid_buck_converter import *
 def run_evaluation(runner, learner, eval_length, name):
     print(f'Evaluating {name}...')
     runner.reset(evaluate=True)
-    obs = avg_runner.get_state()
+    obs = runner.get_state()
     tot_reward = 0.0
     time = np.zeros(eval_length + 1)
-    v_c = np.zeros_like(time)
-    i_l = np.zeros_like(time)
-    acc_reward = np.zeros_like(time)
+    v_c = np.zeros(eval_length + 1)
+    i_l = np.zeros(eval_length + 1)
+    acc_reward = np.zeros(eval_length + 1)
     for i in range(eval_length):
         time[i] = i * sample_time
         i_l[i] = obs[3]
@@ -46,12 +46,12 @@ def run_baseline_evaluation(runner, v_ref, v_s, eval_length):
     print('Evaluating baseline...')
     const_action = 2.0 * (v_ref / v_s) - 1.0  # must be mapped within the tanh range [-1, 1]
     runner.reset(evaluate=True)
-    obs = avg_runner.get_state()
+    obs = runner.get_state()
     tot_reward = 0.0
     time = np.zeros(eval_length + 1)
-    v_c = np.zeros_like(time)
-    i_l = np.zeros_like(time)
-    acc_reward = np.zeros_like(time)
+    v_c = np.zeros(eval_length + 1)
+    i_l = np.zeros(eval_length + 1)
+    acc_reward = np.zeros(eval_length + 1)
     for i in range(eval_length):
         time[i] = i * sample_time
         i_l[i] = obs[3]
@@ -75,6 +75,7 @@ def run_baseline_evaluation(runner, v_ref, v_s, eval_length):
 
     return data
 
+
 if __name__ == '__main__':
     # Declare all the variables
     capacitance = 2.2e-3  # C
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     sample_time = 0.001  # 1/f_s
     switch_period = 1e4  # 1/f_sw
     rollout_length = 2000
-    eval_length = 200
+    eval_length = 50
 
     # Create the runners
     avg_runner = AvgBuckConverter(capacitor_value=capacitance, capacitor_tolerance=0.05, inductor_value=inductance,
@@ -110,7 +111,7 @@ if __name__ == '__main__':
                                         evaluation_init=np.array([0., 0.]))
 
     # Create the learners
-    path_best_avg = './data/avg_dynamics/models/step_56000_model.pth'
+    path_best_avg = './data/avg_dynamics/models/step_72000_model.pth'
     path_best_hybrid = './data/hybrid_dynamics/models/step_60000_model.pth'
     avg_learner_tanh = DDPG(runner=avg_runner, num_training_steps=100000, time_per_step=sample_time,
                             architecture='standard',
@@ -155,8 +156,8 @@ if __name__ == '__main__':
               hybrid_learner_tanh.actor.state_dict()['out.bias'].numpy()]
 
     savemat('./best_hybrid_nnc.mat', mdict={'W': weights, 'b': biases})
-
-    # Collect all models performance in the averaged dynamics environment
+    #
+    # # Collect all models performance in the averaged dynamics environment
     avg_baseline_data = run_baseline_evaluation(runner=avg_runner, v_ref=reference_voltage, v_s=source_voltage,
                                                 eval_length=eval_length)
     avg_tanh_data = run_evaluation(runner=avg_runner, learner=avg_learner_tanh, eval_length=eval_length,
@@ -172,16 +173,17 @@ if __name__ == '__main__':
     avg_dynamics_data.to_csv('./data/avg_dynamics_evaluations.csv')
 
     # Collect all models performance in the hybrid dynamics environment
-    avg_baseline_data = run_baseline_evaluation(runner=hybrid_runner, v_ref=reference_voltage, v_s=source_voltage,
-                                                eval_length=eval_length)
-    avg_tanh_data = run_evaluation(runner=hybrid_runner, learner=avg_learner_tanh, eval_length=eval_length,
-                                   name="avg_tanh")
-    avg_hardtanh_data = run_evaluation(runner=hybrid_runner, learner=avg_learner_hardtanh, eval_length=eval_length,
-                                       name="avg_hardtanh")
-    hybrid_tanh_data = run_evaluation(runner=hybrid_runner, learner=hybrid_learner_tanh, eval_length=eval_length,
-                                      name="hybrid_tanh")
-    hybrid_hardtanh_data = run_evaluation(runner=hybrid_runner, learner=hybrid_learner_hardtanh, eval_length=eval_length,
-                                          name="hybrid_hardtanh")
-    hybrid_dynamics_data = pd.concat([avg_baseline_data, avg_tanh_data, avg_hardtanh_data, hybrid_tanh_data,
-                                   hybrid_hardtanh_data])
+    h_avg_baseline_data = run_baseline_evaluation(runner=hybrid_runner, v_ref=reference_voltage, v_s=source_voltage,
+                                                  eval_length=eval_length)
+    h_avg_tanh_data = run_evaluation(runner=hybrid_runner, learner=avg_learner_tanh, eval_length=eval_length,
+                                     name="avg_tanh")
+    h_avg_hardtanh_data = run_evaluation(runner=hybrid_runner, learner=avg_learner_hardtanh, eval_length=eval_length,
+                                         name="avg_hardtanh")
+    h_hybrid_tanh_data = run_evaluation(runner=hybrid_runner, learner=hybrid_learner_tanh, eval_length=eval_length,
+                                        name="hybrid_tanh")
+    h_hybrid_hardtanh_data = run_evaluation(runner=hybrid_runner, learner=hybrid_learner_hardtanh,
+                                            eval_length=eval_length,
+                                            name="hybrid_hardtanh")
+    hybrid_dynamics_data = pd.concat([h_avg_baseline_data, h_avg_tanh_data, h_avg_hardtanh_data, h_hybrid_tanh_data,
+                                      h_hybrid_hardtanh_data])
     hybrid_dynamics_data.to_csv('./data/hybrid_dynamics_evaluations.csv')
